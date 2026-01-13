@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: krishinet
+    env: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements-prod.txt
+    startCommand: gunicorn app:app
+    pythonVersion: 3.8.10
