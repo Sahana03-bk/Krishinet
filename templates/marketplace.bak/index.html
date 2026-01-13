@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Marketplace — KrishiNet{% endblock %}
+
+{% block content %}
+<div class="container my-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Marketplace Products</h3>
+    <a class="btn btn-success" href="{{ url_for('marketplace.product_new') }}">Post Product</a>
+  </div>
+
+  <form class="row g-2 mb-3" method="get" action="{{ url_for('marketplace.index') }}">
+    <div class="col-12 col-md-6">
+      <input class="form-control" name="q" placeholder="Search products..." value="{{ q or '' }}" aria-label="Search products">
+    </div>
+
+    <div class="col-6 col-md-3">
+      <select name="category" class="form-select" aria-label="Filter by category">
+        <option value="">All categories</option>
+        {% for c in categories %}
+          <option value="{{ c }}" {% if c == cat %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-6 col-md-3 d-flex">
+      <button class="btn btn-outline-success w-100" type="submit">Search</button>
+    </div>
+  </form>
+
+  {% if products %}
+    <div class="row g-3">
+      {% for p in products %}
+      <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+        <div class="card h-100 shadow-sm">
+          {# choose best image available: product_image (media) -> profile_photo -> placeholder #}
+          {% set img = p.product_image or p.profile_photo %}
+          {% if img %}
+            <img
+              src="{{ url_for('static', filename='uploads/' ~ img) }}"
+              alt="{{ p.title | e }}"
+              class="card-img-top"
+              style="height:160px; object-fit:cover;"
+              loading="lazy"
+            >
+          {% else %}
+            <img
+              src="{{ url_for('static', filename='img/placeholder-hero.png') }}"
+              alt="No image"
+              class="card-img-top"
+              style="height:160px; object-fit:cover;"
+              loading="lazy"
+            >
+          {% endif %}
+
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title" style="font-size:1rem; min-height:2.2em; overflow:hidden; text-overflow:ellipsis;">
+              {{ p.title }}
+            </h5>
+
+            <p class="card-text text-muted mb-1" style="font-size:0.9rem;">
+              {{ p.category or '—' }}
+            </p>
+
+            <p class="mb-2" style="font-size:0.95rem;">
+              <strong>₹{{ '%.2f'|format(p.price or 0) }}</strong>
+              {% if p.quantity is not none %}
+                &nbsp;•&nbsp; {{ '%.2f'|format(p.quantity|float) if p.quantity is not none else 0 }} {{ p.quantity_unit or '' }}
+              {% endif %}
+            </p>
+
+            <div class="mt-auto d-flex justify-content-between align-items-center">
+              <a href="{{ url_for('marketplace.view_product', pid=p.id) }}" class="btn btn-sm btn-outline-success" aria-label="View {{ p.title }}">View</a>
+
+              {% if session.get('user_id') and p.seller_id == session.get('user_id') %}
+                <span class="text-muted small">You</span>
+              {% else %}
+                <a href="{{ url_for('view_farmer', uid=p.seller_id) }}" class="text-success small" title="View seller {{ p.seller_name }}">{{ p.seller_name }}</a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-info">No products found. Be the first to <a href="{{ url_for('marketplace.product_new') }}">post a product</a>.</div>
+  {% endif %}
+</div>
+{% endblock %}

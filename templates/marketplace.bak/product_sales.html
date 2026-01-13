@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Sales — {{ product.title }}{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Total Sales</h3>
+    <a class="btn btn-outline-secondary" href="{{ url_for('marketplace.my_posts') }}">Back to My Products</a>
+  </div>
+
+  <div class="mb-3">
+    <strong>Total sold:</strong> {{ total_sold }} {{ product.quantity_unit or '' }} &nbsp;&nbsp;
+    <strong>Total revenue:</strong> ₹{{ '%.2f'|format(total_revenue or 0) }}
+  </div>
+
+  {% if not orders %}
+    <div class="alert alert-info">No paid orders for this product yet.</div>
+  {% else %}
+  <table class="table table-striped">
+    <thead class="table-success">
+      <tr>
+        <th>Order ID</th>
+        <th>Buyer</th>
+        <th>Qty</th>
+        <th>Unit Price</th>
+        <th>Subtotal</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+      <tr>
+        <td>#{{ o.order_id }}</td>
+        <td>{{ o.buyer_name or ('User #' ~ o.buyer_id) }}</td>
+        <td>{{ '%.2f'|format(o.quantity or 0) }} {{ o.qty_unit or '' }}</td>
+        <td>₹{{ '%.2f'|format(o.unit_price or 0) }}</td>
+        <td>₹{{ '%.2f'|format(o.subtotal or 0) }}</td>
+        <td>{{ o.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

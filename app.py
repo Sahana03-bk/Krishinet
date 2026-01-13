@@ -1,0 +1,1516 @@
+# app.py - cleaned & minimal (single root handler, consistent redirects)
+import os
+import sqlite3
+import json
+from pathlib import Path
+from functools import wraps
+from datetime import datetime as _dt
+from dotenv import load_dotenv
+from flask import (
+    Flask, render_template, request, jsonify, redirect,
+    url_for, g, flash, session, abort, current_app
+)
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+import requests
+from urllib.parse import urlencode, urlparse
+from newspaper import Article
+import bleach
+import time
+from dateutil import parser, tz
+from datetime import datetime, time as dt_time, timedelta
+import feedparser
+from flask import jsonify
+from flask import g, session, abort
+from datetime import datetime
+
+from auth import get_db, login_required
+from werkzeug.utils import secure_filename
+from flask import send_from_directory, abort
+
+
+
+load_dotenv()
+
+# optional imports (non-fatal if missing)
+try:
+    from routes_market import market_bp
+except Exception:
+    market_bp = None
+
+try:
+    from news_aggregator import get_news, list_languages
+except Exception:
+    # define fallbacks so /api/news won't crash if news_aggregator missing
+    def get_news(lang="en", limit=12):
+        return []
+    def list_languages():
+        return []
+
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+    IST = ZoneInfo("Asia/Kolkata")
+except Exception:
+    import pytz
+    IST = pytz.timezone("Asia/Kolkata")
+
+
+# paths
+BASE_DIR = os.path.dirname(__file__)
+ARTICLES_FILE = os.path.join(BASE_DIR, "articles.json")
+VIDEO_MIME = ("video/mp4", "video/webm", "video/ogg", "video/quicktime")
+
+# --- App config ---
+app = Flask(__name__, template_folder="templates", static_folder="static")
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-change-me")
+DB_PATH = os.getenv("KRISHINET_DB", "users.db")
+DB = os.path.join(BASE_DIR, DB_PATH)
+app.config["DATABASE"] = DB
+
+# Uploads
+UPLOAD_DIR = os.path.join(app.static_folder or "static", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+ALLOWED_EXTS = {"png","jpg","jpeg","gif","webp", "mp4", "webm", "ogg", "mov", "mkv"}
+
+app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200MB
+
+# register market blueprint if available
+if market_bp is not None:
+    app.register_blueprint(market_bp)
+
+# Register marketplace blueprint if available (avoid duplicate registration)
+# --- register marketplace blueprint (now that login_required is defined) ---
+# register marketplace blueprint (after helpers & DB init)
+try:
+    from routes_marketplace import marketplace_bp
+    if marketplace_bp:
+        app.register_blueprint(marketplace_bp)
+        app.logger.info("routes_marketplace imported and marketplace blueprint registered")
+except Exception:
+    app.logger.exception("Failed to import/register routes_marketplace; please check routes_marketplace.py")
+    raise
+
+try:
+    from routes_rental import rental_bp
+    app.register_blueprint(rental_bp)
+    app.logger.info("routes_rental registered")
+except Exception:
+    app.logger.exception("Failed to import/register routes_rental")
+
+
+try:
+    from routes_profile import profile_bp
+    app.register_blueprint(profile_bp)
+    app.logger.info("routes_profile registered")
+except Exception:
+    app.logger.exception("Failed to register routes_profile")
+
+# register payments blueprint (Stripe)
+try:
+    from routes_payments import payments_bp
+    app.register_blueprint(payments_bp)
+    app.logger.info("routes_payments registered")
+except Exception:
+    app.logger.exception("Failed to import/register routes_payments")
+
+
+# ---------------- DB helpers & migrations ----------------
+def get_db():
+    if "db" not in g:
+        conn = sqlite3.connect(app.config["DATABASE"])
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        g.db = conn
+    return g.db
+
+@app.teardown_appcontext
+def close_db(exc):
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+@app.route("/")
+def index():
+    """
+    Single root handler:
+    - If logged in, redirect to dashboard
+    - Otherwise render frontpage.html if present, fallback to simple text
+    """
+    if session.get("user_id"):
+        return redirect(url_for("dashboard"))
+
+    tpl = os.path.join(app.template_folder or "templates", "frontpage.html")
+    if os.path.exists(tpl):
+        return render_template("frontpage.html")
+    return "KrishiNet — frontpage"
+
+def init_db():
+    db = get_db()
+    db.executescript("""
+        PRAGMA foreign_keys = ON;
+
+        -- users (added village/taluk to avoid missing-column errors)
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            phone TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            state TEXT,
+            district TEXT,
+            city TEXT,
+            village TEXT,
+            taluk TEXT,
+            pincode TEXT,
+            profile_photo TEXT,
+            wants_updates INTEGER DEFAULT 0,
+            accepted_terms INTEGER DEFAULT 0,
+            role TEXT DEFAULT 'farmer',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_users_name_state_district
+          ON users(name, state, district);
+
+        -- follow
+        CREATE TABLE IF NOT EXISTS follow (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            follower_id INTEGER NOT NULL,
+            target_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(follower_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(target_id)   REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(follower_id, target_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_follow_follower ON follow(follower_id);
+        CREATE INDEX IF NOT EXISTS idx_follow_target ON follow(target_id);
+
+        -- notifications
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            actor_id INTEGER NULL,
+            verb TEXT NOT NULL,
+            payload TEXT DEFAULT '',
+            is_read INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id)  REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(actor_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_user_isread ON notifications(user_id, is_read);
+        CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+
+        -- marketplace schema
+        CREATE TABLE IF NOT EXISTS products (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          seller_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          category TEXT,
+          description TEXT,
+          price REAL DEFAULT 0,
+          quantity REAL DEFAULT 0,
+          quantity_unit TEXT,
+          delivery_locations TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(seller_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_products_seller ON products(seller_id);
+        CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+
+        CREATE TABLE IF NOT EXISTS product_media (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          product_id INTEGER NOT NULL,
+          filename TEXT,
+          media_type TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
+        );
+
+        -- orders
+        CREATE TABLE IF NOT EXISTS orders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          buyer_id INTEGER NOT NULL,
+          seller_id INTEGER NOT NULL,
+          total_amount REAL NOT NULL,
+          currency TEXT DEFAULT 'INR',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          status TEXT DEFAULT 'created',
+          payment_meta TEXT DEFAULT '',
+          gateway TEXT,
+          stripe_session_id TEXT,
+          stripe_payment_intent TEXT,
+          FOREIGN KEY(buyer_id) REFERENCES users(id),
+          FOREIGN KEY(seller_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS order_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          unit_price REAL NOT NULL,
+          quantity REAL NOT NULL,
+          qty_unit TEXT,
+          subtotal REAL NOT NULL,
+          FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE,
+          FOREIGN KEY(product_id) REFERENCES products(id)
+        );
+
+        -- payments table (records successful payments)
+        CREATE TABLE IF NOT EXISTS payments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          currency TEXT DEFAULT 'INR',
+          gateway TEXT,
+          payment_intent TEXT,
+          raw_meta TEXT DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
+
+        -- rentals module (non-destructive)
+        CREATE TABLE IF NOT EXISTS rentals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          category TEXT,
+          price_per_day REAL DEFAULT 0,
+          deposit REAL DEFAULT 0,
+          condition TEXT,
+          location TEXT,
+          latitude REAL,
+          longitude REAL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_rentals_owner ON rentals(owner_id);
+        CREATE INDEX IF NOT EXISTS idx_rentals_category ON rentals(category);
+
+        CREATE TABLE IF NOT EXISTS rental_media (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rental_id INTEGER NOT NULL,
+          filename TEXT,
+          media_type TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(rental_id) REFERENCES rentals(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS rental_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rental_id INTEGER NOT NULL,
+          requester_id INTEGER NOT NULL,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          requested_days INTEGER NOT NULL,
+          price_offered REAL,
+          status TEXT DEFAULT 'requested',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          accepted_at TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(rental_id) REFERENCES rentals(id) ON DELETE CASCADE,
+          FOREIGN KEY(requester_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_rental_requests_rental_status ON rental_requests(rental_id, status);
+
+        CREATE TABLE IF NOT EXISTS rental_unavailabilities (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rental_id INTEGER NOT NULL,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(rental_id) REFERENCES rentals(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS rental_reviews (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rental_id INTEGER NOT NULL,
+          reviewer_id INTEGER NOT NULL,
+          rating INTEGER NOT NULL,
+          comment TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(rental_id) REFERENCES rentals(id) ON DELETE CASCADE,
+          FOREIGN KEY(reviewer_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS rental_payments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          request_id INTEGER NOT NULL,
+          payer_id INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          currency TEXT DEFAULT 'INR',
+          method TEXT,
+          status TEXT DEFAULT 'pending',
+          external_id TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(request_id) REFERENCES rental_requests(id) ON DELETE CASCADE,
+          FOREIGN KEY(payer_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+         CREATE TABLE IF NOT EXISTS growlog_videos (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         owner_id INTEGER NOT NULL,
+         filename TEXT NOT NULL,
+         title TEXT,
+         description TEXT,
+         vid_type TEXT, -- optional: "demo", "harvest", "tips", etc.
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+         CREATE INDEX IF NOT EXISTS idx_growlog_owner ON growlog_videos(owner_id);
+         CREATE INDEX IF NOT EXISTS idx_growlog_created ON growlog_videos(created_at);
+
+         -- likes (one user -> one video)
+         CREATE TABLE IF NOT EXISTS growlog_likes (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         video_id INTEGER NOT NULL,
+         user_id INTEGER NOT NULL,
+         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         UNIQUE(video_id, user_id),
+         FOREIGN KEY(video_id) REFERENCES growlog_videos(id) ON DELETE CASCADE,
+         FOREIGN KEY(user_id)  REFERENCES users(id) ON DELETE CASCADE
+        );
+         CREATE INDEX IF NOT EXISTS idx_growlog_likes_video ON growlog_likes(video_id);
+         -- comments
+         CREATE TABLE IF NOT EXISTS growlog_comments (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         video_id INTEGER NOT NULL,
+         user_id INTEGER NOT NULL,
+         comment TEXT NOT NULL,
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         FOREIGN KEY(video_id) REFERENCES growlog_videos(id) ON DELETE CASCADE,
+         FOREIGN KEY(user_id)  REFERENCES users(id) ON DELETE CASCADE
+        );
+          CREATE INDEX IF NOT EXISTS idx_growlog_comments_video ON growlog_comments(video_id);
+    """)
+    db.commit()
+
+
+
+    
+
+# ensure DB file exists and run migrations
+Path(DB).touch(exist_ok=True)
+with app.app_context():
+    init_db()
+
+# ---------------- Auth helpers ----------------
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("user_id"):
+            flash("Please log in to continue.", "warning")
+            return redirect(url_for("login"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.get("/api/notifications/unread_count")
+@login_required
+def api_notifications_unread_count():
+    uid = session.get("user_id")
+    db = get_db()
+    cnt = db.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0", (uid,)).fetchone()[0]
+    return jsonify({"ok": True, "unread": cnt})
+
+@app.get("/api/notifications/list")
+@login_required
+def api_notifications_list():
+    # returns JSON list of latest notifications (not auto-marking)
+    uid = session.get("user_id")
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, actor_id, verb, payload, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 200",
+        (uid,)
+    ).fetchall()
+    notes = []
+    for r in rows:
+        try:
+            payload = json.loads(r["payload"] or "{}")
+        except Exception:
+            payload = {}
+        notes.append({
+            "id": r["id"],
+            "actor_id": r["actor_id"],
+            "verb": r["verb"],
+            "payload": payload,
+            "is_read": bool(r["is_read"]),
+            "created_at": r["created_at"]
+        })
+    return jsonify({"ok": True, "notifications": notes})
+
+# notifications page (renders HTML)
+@app.get("/notifications")
+@login_required
+def notifications_page():
+    uid = session.get("user_id")
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, actor_id, verb, payload, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 200",
+        (uid,)
+    ).fetchall()
+    notes = []
+    for r in rows:
+        try:
+            payload = json.loads(r["payload"] or "{}")
+        except Exception:
+            payload = {}
+        notes.append({
+            "id": r["id"],
+            "actor_id": r["actor_id"],
+            "verb": r["verb"],
+            "payload": payload,
+            "is_read": bool(r["is_read"]),
+            "created_at": r["created_at"]
+        })
+
+    # Optionally: mark all shown notifications as read when user lands on page.
+    # If you prefer clicking to mark read, remove the block below.
+    if notes:
+        unread_ids = [str(n["id"]) for n in notes if not n["is_read"]]
+        if unread_ids:
+            db.execute("UPDATE notifications SET is_read = 1 WHERE id IN (%s)" % ",".join("?"*len(unread_ids)), unread_ids)
+            db.commit()
+            # refresh the notes list to reflect read status
+            for n in notes:
+                if n["id"] in map(int, unread_ids):
+                    n["is_read"] = True
+
+    return render_template("notifications.html", notifications=notes)
+
+@app.post("/api/notifications/mark_read/<int:note_id>")
+@login_required
+def api_notifications_mark_read(note_id):
+    uid = session.get("user_id")
+    db = get_db()
+    try:
+        with db:
+            db.execute("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?", (note_id, uid))
+        return jsonify({"ok": True})
+    except Exception:
+        current_app.logger.exception("mark_read failed")
+        return jsonify({"ok": False}), 500
+
+@app.post("/api/notifications/mark_all_read")
+@login_required
+def api_notifications_mark_all_read():
+    uid = session.get("user_id")
+    db = get_db()
+    try:
+        with db:
+            db.execute("UPDATE notifications SET is_read = 1 WHERE user_id = ?", (uid,))
+        return jsonify({"ok": True})
+    except Exception:
+        current_app.logger.exception("mark_all_read failed")
+        return jsonify({"ok": False}), 500
+
+
+# ---------- Notifications helper ----------
+def notif_actor_payload(actor_id, extra=None):
+    """
+    Build a JSON payload containing actor (follower) name, photo, location,
+    plus any optional extra fields.
+    """
+    db = get_db()
+    actor = db.execute(
+        "SELECT id, name, profile_photo, city, district, state FROM users WHERE id = ?",
+        (actor_id,)
+    ).fetchone()
+
+    name = actor["name"] if actor and actor["name"] else None
+    photo = actor["profile_photo"] if actor and actor["profile_photo"] else None
+
+    parts = []
+    if actor:
+        for k in ("city", "district", "state"):
+            val = actor[k]
+            if val:
+                parts.append(val)
+    location = ", ".join(parts) if parts else None
+
+    payload = {
+        "follower_id": actor_id,
+        "follower_name": name or None,
+        "profile_photo": photo or None,
+        "location": location or None,
+    }
+    if extra and isinstance(extra, dict):
+        payload.update(extra)
+
+    return json.dumps(payload)
+# -------------------------------------------
+
+
+# ---------------- Request-scoped user loader ----------------
+@app.before_request
+def load_current_user():
+    uid = session.get("user_id")
+    if not uid:
+        g.user = None
+        return
+
+    row = get_db().execute(
+        "SELECT id, name, email, phone, state, district, city, profile_photo "
+        "FROM users WHERE id = ?", (uid,)
+    ).fetchone()
+
+    # convert sqlite3.Row -> dict so templates can use user.id / user.name reliably
+    if row:
+        g.user = {k: row[k] for k in row.keys()}
+    else:
+        g.user = None
+
+
+@app.context_processor
+def inject_user_and_now():
+    # expose current user and time helpers to templates
+    return {"user": g.get("user"), "now": _dt.utcnow, "datetime": _dt}
+
+# ---------------- Helpers ----------------
+def _allowed(fn: str) -> bool:
+    return "." in fn and fn.rsplit(".", 1)[1].lower() in ALLOWED_EXTS
+
+def load_articles():
+    try:
+        with open(ARTICLES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+# ---------------- Routes ----------------
+@app.route("/registration", methods=["GET", "POST"])
+def registration():
+    if request.method == "POST":
+        name     = (request.form.get("name") or "").strip()
+        email    = (request.form.get("email") or "").lower().strip()
+        phone    = (request.form.get("phone") or "").strip()
+        state    = (request.form.get("state") or "").strip()
+        district = (request.form.get("district") or request.form.get("district_text") or "").strip()
+        city     = (request.form.get("city") or "").strip()
+        pincode  = (request.form.get("pincode") or "").strip()
+        pwd_plain = request.form.get("password") or ""
+
+        if not all([name, email, phone, pwd_plain]):
+            flash("Name, email, phone and password are required.", "danger")
+            return redirect(url_for("registration"))
+
+        if pincode and (not pincode.isdigit() or len(pincode) != 6):
+            flash("Please enter a valid 6-digit pin code.", "warning")
+            return redirect(url_for("registration"))
+
+        wants_updates = 1 if request.form.get("updates") else 0
+        accepted_terms = 1 if request.form.get("terms") else 0
+        if not accepted_terms:
+            flash("You must accept Terms & Privacy to register.", "warning")
+            return redirect(url_for("registration"))
+
+        try:
+            with get_db() as conn:
+                conn.execute("""
+                    INSERT INTO users (name, email, phone, password, state, district, city, pincode, wants_updates, accepted_terms)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (name, email, phone, pwd_plain, state, district, city, pincode, wants_updates, accepted_terms))
+            flash("Registration successful. Please log in.", "success")
+            return redirect(url_for("login"))
+        except sqlite3.IntegrityError as e:
+            msg = str(e).lower()
+            if "email" in msg:
+                flash("This email is already registered.", "warning")
+            elif "phone" in msg:
+                flash("This phone number is already registered.", "warning")
+            else:
+                flash("Could not create the account. Please try again.", "danger")
+            return redirect(url_for("registration"))
+
+    return render_template("registration.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = (request.form.get("email") or "").lower().strip()
+        pwd   = request.form.get("password") or ""
+
+        row = get_db().execute(
+            "SELECT id, name, password FROM users WHERE email = ?", (email,)
+        ).fetchone()
+
+        # If credentials invalid -> render login page with local error (do NOT flash)
+        if not row or (row["password"] != pwd):
+            # render login.html in the same request and pass an error string so only this page shows it
+            return render_template("login.html", email=email, login_error="Invalid email or password.")
+
+        # success -> create session and redirect to dashboard (we can flash success here)
+        session["user_id"] = row["id"]
+        session["user_name"] = row["name"]
+        flash(f"Welcome back, {row['name']}!", "success")
+        return redirect(url_for("dashboard"))
+
+    # GET -> show login form
+    return render_template("login.html")
+
+@app.get("/logout")
+def logout():
+    session.clear()
+    flash("Logged out.", "info")
+    return redirect(url_for("login"))
+
+@app.get("/dashboard")
+@login_required
+def dashboard():
+    db = get_db()
+    user = g.user   # use the dict we already loaded in load_current_user()
+    if not user:
+        abort(404)
+
+    try:
+        followers = db.execute(
+            "SELECT COUNT(*) FROM follow WHERE target_id = ?", (user["id"],)
+        ).fetchone()[0]
+        following = db.execute(
+            "SELECT COUNT(*) FROM follow WHERE follower_id = ?", (user["id"],)
+        ).fetchone()[0]
+    except sqlite3.OperationalError:
+        followers = 0
+        following = 0
+
+    return render_template("dashboard.html", followers=followers, following=following)
+
+@app.post("/profile/photo")
+@login_required
+def upload_profile_photo():
+    file = request.files.get("photo")
+    if not file or file.filename == "":
+        flash("Please choose a photo.", "warning")
+        return redirect(url_for("dashboard"))
+    if not _allowed(file.filename):
+        flash("Unsupported file type. Use png/jpg/jpeg/gif/webp.", "danger")
+        return redirect(url_for("dashboard"))
+
+    ext = file.filename.rsplit(".", 1)[1].lower()
+    fname = secure_filename(f"user{session['user_id']}_{int(_dt.utcnow().timestamp())}.{ext}")
+    file.save(os.path.join(UPLOAD_DIR, fname))
+
+    with get_db() as conn:
+        conn.execute("UPDATE users SET profile_photo=? WHERE id=?", (fname, session["user_id"]))
+    flash("Profile photo updated.", "success")
+    return redirect(url_for("dashboard"))
+
+@app.route("/profile/edit", methods=["GET", "POST"])
+@login_required
+def profile_edit():
+    uid = session.get("user_id")
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        phone = (request.form.get("phone") or "").strip()
+        state = (request.form.get("state") or "").strip()
+        district = (request.form.get("district") or "").strip()
+        city = (request.form.get("city") or "").strip()
+        pincode = (request.form.get("pincode") or "").strip()
+        pwd = request.form.get("password")  # if user wants to change
+
+        if not name or not phone:
+            flash("Name and phone are required.", "warning")
+            return redirect(url_for("profile_edit"))
+
+        with get_db() as conn:
+            if pwd:
+                conn.execute("""
+                    UPDATE users SET name=?, phone=?, state=?, district=?, city=?, pincode=?, password=?
+                    WHERE id=?
+                """, (name, phone, state, district, city, pincode, pwd, uid))
+            else:
+                conn.execute("""
+                    UPDATE users SET name=?, phone=?, state=?, district=?, city=?, pincode=?
+                    WHERE id=?
+                """, (name, phone, state, district, city, pincode, uid))
+
+        flash("Profile updated.", "success")
+        return redirect(url_for("dashboard"))
+
+    user = get_db().execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    return render_template("profile_edit.html", user=user)
+
+@app.post("/profile/delete")
+@login_required
+def profile_delete():
+    uid = session.get("user_id")
+    with get_db() as conn:
+        conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+    session.clear()
+    flash("Your account has been deleted.", "info")
+    # use index endpoint (single root handler)
+    return redirect(url_for("index"))
+
+@app.route('/news/view')
+def news_view():
+    url = request.args.get('url')
+    if not url:
+        abort(404)
+
+    # Basic safety: allow only http(s)
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        abort(400)
+
+    try:
+        # Try to extract the article with newspaper
+        art = Article(url)
+        art.download()
+        art.parse()
+
+        # If no text or tiny text, treat as failure
+        if not (art.text and len(art.text) > 200):
+            raise RuntimeError("No substantial text extracted")
+
+        # Convert publish_date -> IST if available
+        published_str = ""
+        if getattr(art, "publish_date", None):
+            try:
+                from dateutil import tz
+                dt = art.publish_date.astimezone(tz.gettz("Asia/Kolkata"))
+                published_str = dt.strftime("%Y-%m-%d %H:%M IST")
+            except Exception:
+                published_str = str(art.publish_date)[:16]
+
+        safe_text = bleach.clean(art.text or "", strip=True)
+        article = {
+            "title": art.title or "",
+            "top_image": art.top_image or "",
+            "text": safe_text,
+            "source_url": url,
+            "published": published_str
+        }
+        return render_template("news_view_inline.html", article=article)
+
+    except Exception as e:
+        # Log the failure and redirect to the original URL (opens in new tab)
+        current_app.logger.warning("Inline article failed: %s; redirecting to original", e)
+        return redirect(url)
+
+INDIAN_AGRI_RSS_FEEDS = [
+    "https://www.thehindu.com/news/national/agriculture/feeder/default.rss",
+    "https://www.thehindubusinessline.com/economy/agri-business/feeder/default.rss",
+    "https://www.livemint.com/rss/industry/agriculture",
+    "https://indianexpress.com/section/business/agriculture/feed/",
+    "https://www.news18.com/rss/india-agriculture.xml",
+]
+
+AGRI_KEYWORDS = (
+    "agri", "agriculture", "farm", "farmer", "farming", "crop", "crops",
+    "dairy", "paddy", "rice", "wheat", "horti", "horticulture", "irrig", "irrigation",
+    "fertil", "fertilizer", "market", "mandi", "onion", "vegetable", "fruit", "fisher",
+    "fisheries", "livestock", "tractor", "harvest", "seeds", "seed"
+)
+
+def fetch_rss_feeds(limit_per_feed=8):
+    out = []
+    for url in INDIAN_AGRI_RSS_FEEDS:
+        try:
+            d = feedparser.parse(url)
+            source = (d.feed.get("title") or url.split("//")[-1].split("/")[0]).strip()
+            for entry in (d.entries or [])[:limit_per_feed]:
+                title = (entry.get("title") or "").strip()
+                desc = (entry.get("summary") or entry.get("description") or "").strip()
+                link = entry.get("link") or entry.get("id") or ""
+                image = ""
+                if entry.get("media_thumbnail"):
+                    image = entry.media_thumbnail[0].get("url", "")
+                elif entry.get("media_content"):
+                    image = entry.media_content[0].get("url", "")
+                elif entry.get("image"):
+                    image = entry.get("image")
+                published_raw = entry.get("published") or entry.get("updated") or ""
+                published_str = ""
+                try:
+                    if published_raw:
+                        dt = parser.parse(published_raw)
+                        ist = dt.astimezone(tz.gettz("Asia/Kolkata"))
+                        published_str = ist.strftime("%Y-%m-%d %H:%M")
+                except Exception:
+                    try:
+                        tp = entry.get("published_parsed") or entry.get("updated_parsed")
+                        if tp:
+                            dt = _dt.fromtimestamp(time.mktime(tp))
+                            ist = dt.astimezone(tz.gettz("Asia/Kolkata"))
+                            published_str = ist.strftime("%Y-%m-%d %H:%M")
+                    except Exception:
+                        published_str = (published_raw[:16] if published_raw else "")
+                out.append({
+                    "title": title,
+                    "description": desc,
+                    "image": image,
+                    "link": link,
+                    "source": source,
+                    "published": published_str
+                })
+        except Exception as e:
+            app.logger.warning("fetch_rss_feeds: failed for %s (%s)", url, e)
+    return out
+
+@app.route('/news')
+def news_page():
+    api_key = os.getenv('NEWSAPI_KEY') or os.getenv('NEWSAPI', '')  # keep your env variable
+    q = "Agriculture OR farming OR crops OR farmers OR agri OR horticulture OR dairy OR fisheries OR irrigation"
+
+    articles = []
+    if api_key:
+        try:
+            params = {
+                "q": q,
+                "language": "en",
+                "pageSize": 40,
+                "sortBy": "publishedAt",
+                "apiKey": api_key,
+            }
+            res = requests.get("https://newsapi.org/v2/everything", params=params, timeout=10)
+            data = res.json()
+            if data.get("status") == "ok" and data.get("articles"):
+                for a in data["articles"]:
+                    title = (a.get("title") or "").strip()
+                    desc = (a.get("description") or "").strip()
+                    combined = (title + " " + desc).lower()
+                    if any(k in combined for k in AGRI_KEYWORDS):
+                        published_raw = a.get("publishedAt") or ""
+                        published_str = ""
+                        try:
+                            dt = parser.isoparse(published_raw)
+                            ist = dt.astimezone(tz.gettz("Asia/Kolkata"))
+                            published_str = ist.strftime("%Y-%m-%d %H:%M")
+                        except Exception:
+                            published_str = (published_raw[:16] if published_raw else "")
+                        articles.append({
+                            "title": a.get("title"),
+                            "description": a.get("description"),
+                            "image": a.get("urlToImage"),
+                            "link": a.get("url"),
+                            "source": (a.get("source") or {}).get("name"),
+                            "published": published_str
+                        })
+        except Exception as e:
+            app.logger.warning("news_page: NewsAPI fetch failed: %s", e)
+
+    rss_items = fetch_rss_feeds(limit_per_feed=10)
+    for r in rss_items:
+        combined = ((r.get("title") or "") + " " + (r.get("description") or "")).lower()
+        if any(k in combined for k in AGRI_KEYWORDS):
+            articles.append(r)
+
+    if len(articles) < 10:
+        extra = []
+        for r in fetch_rss_feeds(limit_per_feed=20):
+            if r.get("link") and r not in articles:
+                try:
+                    pub = r.get("published") or ""
+                    if pub:
+                        dt = parser.parse(pub)
+                        now = _dt.now(tz.gettz("Asia/Kolkata"))
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=tz.gettz("Asia/Kolkata"))
+                        delta = now - dt
+                        if delta.total_seconds() <= 48 * 3600:
+                            extra.append(r)
+                except Exception:
+                    extra.append(r)
+        seen_links = {a.get("link") for a in articles}
+        for e in extra:
+            if e.get("link") not in seen_links:
+                articles.append(e)
+                seen_links.add(e.get("link"))
+            if len(articles) >= 15:
+                break
+
+    unique = {}
+    for a in articles:
+        link = a.get("link") or a.get("source", "") + a.get("title", "")
+        if link in unique:
+            old = unique[link]
+            if (a.get("published") or "") > (old.get("published") or ""):
+                unique[link] = a
+        else:
+            unique[link] = a
+
+    deduped = list(unique.values())
+    def sort_key(x):
+        return x.get("published") or ""
+    deduped.sort(key=sort_key, reverse=True)
+    deduped = deduped[:24]
+
+    return render_template("news.html", news_articles=deduped, source_hint='newsapi' if api_key else 'aggregator')
+
+@app.get("/available-files")
+def available_files():
+    root = os.path.dirname(__file__)
+    out = []
+    EXCLUDE_DIRS = {"venv", ".venv", "__pycache__", ".git", "node_modules"}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS and not d.startswith(".")]
+        for fname in filenames:
+            if fname.startswith("."):
+                continue
+            full = os.path.join(dirpath, fname)
+            try:
+                st = os.stat(full)
+            except OSError:
+                continue
+            rel = os.path.relpath(full, root)
+            out.append({
+                "path": rel.replace("\\", "/"),
+                "size": st.st_size,
+                "mtime": _dt.utcfromtimestamp(st.st_mtime).isoformat() + "Z"
+            })
+    out.sort(key=lambda x: x["path"])
+    return jsonify(out)
+
+@app.route("/api/subsidies")
+def api_subsidies():
+    api_key = os.getenv("DATA_GOV_API_KEY")
+    resource_id = os.getenv("DATA_GOV_RESOURCE")
+    items = []
+
+    fallback = [
+        {"name": "PM-Kisan (Pradhan Mantri Kisan Samman Nidhi)", "category": "Direct Cash Transfer",
+         "summary": "Income support scheme providing ₹6,000/year to eligible small and marginal farmers in 3 equal instalments.",
+         "link": "https://pmkisan.gov.in", "source": "Government of India"},
+        {"name": "Kisan Credit Card (KCC)", "category": "Short-term Crop Loan",
+         "summary": "Credit facility for crop production, allied agricultural activities and consumption needs at subsidized interest.",
+         "link": "https://www.nabard.org", "source": "NABARD / Banks"},
+        # ... (truncated here for brevity in this code block; keep same fallback dataset as before)
+    ]
+
+    if api_key and resource_id:
+        try:
+            url = f"https://api.data.gov.in/resource/{resource_id}"
+            params = {"api-key": api_key, "format": "json", "limit": 200}
+            r = requests.get(url, params=params, timeout=8)
+            r.raise_for_status()
+            payload = r.json()
+            recs = payload.get("records") or payload.get("data") or []
+            for rr in recs:
+                name = rr.get("scheme_name") or rr.get("title") or rr.get("name") or rr.get("scheme")
+                summary = rr.get("description") or rr.get("summary") or rr.get("purpose") or rr.get("detail")
+                link = rr.get("url") or rr.get("link") or rr.get("website") or ""
+                category = rr.get("category") or rr.get("type") or "Scheme"
+                if name:
+                    items.append({
+                        "name": name,
+                        "category": category,
+                        "summary": (summary or "")[:800],
+                        "link": link or "",
+                        "source": rr.get("agency") or rr.get("source") or "data.gov.in"
+                    })
+        except Exception as e:
+            app.logger.warning("api_subsidies: data.gov fetch failed: %s", e)
+
+    if not items:
+        items = fallback
+
+    seen = set()
+    out = []
+    for it in items:
+        key = (it.get("name") or "").strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(it)
+
+    return jsonify({"items": out})
+
+@app.get("/subsidies")
+def subsidies_page():
+    return render_template("subsidies.html")
+
+from flask import jsonify
+
+@app.post("/api/follow/<int:target_id>")
+@login_required
+def api_follow(target_id):
+    uid = session.get("user_id")
+    if uid is None:
+        return jsonify({"ok": False, "error": "not_authenticated"}), 401
+    if uid == target_id:
+        return jsonify({"ok": False, "error": "cannot_follow_self"}), 400
+
+    db = get_db()
+    try:
+        with db:
+            # Try to insert the follow; use INSERT OR IGNORE to avoid duplicates
+            db.execute(
+                "INSERT OR IGNORE INTO follow (follower_id, target_id) VALUES (?, ?)",
+                (uid, target_id)
+            )
+            # confirm insertion by selecting the follow row
+            rcheck = db.execute("SELECT 1 FROM follow WHERE follower_id = ? AND target_id = ?", (uid, target_id)).fetchone()
+            inserted = bool(rcheck)
+
+            if inserted:
+                # load follower details for nicer notification payload
+                r = db.execute("SELECT id, name, profile_photo, city, district, state FROM users WHERE id = ?", (uid,)).fetchone()
+                follower_name = r["name"] if r else "Someone"
+                profile_photo = r["profile_photo"] if r and r["profile_photo"] else ""
+                city = r["city"] or ""
+                district = r["district"] or ""
+                state = r["state"] or ""
+                # include nice location if available
+                location = ", ".join([x for x in (city or "", district or "", state or "") if x])[:80]
+                payload = json.dumps({
+                    "follower_id": uid,
+                    "follower_name": follower_name,
+                    "profile_photo": profile_photo,
+                    "location": location
+                })
+                db.execute("""
+                    INSERT INTO notifications (user_id, actor_id, verb, payload, is_read)
+                    VALUES (?, ?, ?, ?, 0)
+                """, (target_id, uid, "followed", payload))
+
+        # optional: return follower count
+        followers = db.execute("SELECT COUNT(*) FROM follow WHERE target_id = ?", (target_id,)).fetchone()[0]
+        return jsonify({"ok": True, "action": "followed", "inserted": bool(inserted), "followers": followers})
+    except Exception:
+        current_app.logger.exception("follow failed")
+        return jsonify({"ok": False, "error": "db_error"}), 500
+
+@app.post("/api/unfollow/<int:target_id>")
+@login_required
+def api_unfollow(target_id):
+    uid = session.get("user_id")
+    if uid == target_id:
+        return jsonify({"ok": False, "error": "cannot_unfollow_self"}), 400
+
+    db = get_db()
+    try:
+        with db:
+            db.execute("DELETE FROM follow WHERE follower_id = ? AND target_id = ?", (uid, target_id))
+        followers = db.execute("SELECT COUNT(*) FROM follow WHERE target_id = ?", (target_id,)).fetchone()[0]
+        return jsonify({"ok": True, "action": "unfollowed", "followers": followers})
+    except Exception as e:
+        current_app.logger.exception("unfollow failed")
+        return jsonify({"ok": False, "error": "db_error"}), 500
+
+@app.get("/farmer/<int:uid>")
+@login_required
+def view_farmer(uid):
+    db = get_db()
+    row = db.execute("SELECT id, name, email, phone, city, district, state, profile_photo FROM users WHERE id = ?", (uid,)).fetchone()
+    if not row:
+        abort(404)
+
+    # counts
+    followers = db.execute("SELECT COUNT(*) FROM follow WHERE target_id = ?", (uid,)).fetchone()[0]
+    following = db.execute("SELECT COUNT(*) FROM follow WHERE follower_id = ?", (uid,)).fetchone()[0]
+
+    # does current user follow this farmer?
+    is_following = False
+    me = session.get("user_id")
+    if me:
+        r = db.execute("SELECT 1 FROM follow WHERE follower_id = ? AND target_id = ?", (me, uid)).fetchone()
+        is_following = bool(r)
+
+    # posts placeholder: we will add posts later
+    posts = []  # TODO: replace with real posts later
+
+    return render_template("farmer_profile.html",
+                           farmer=row, followers=followers, following=following,
+                           is_following=is_following, posts=posts)
+
+# ---------- Followers / Following routes (paste these exact handlers) ----------
+@app.get("/farmer/<int:user_id>/followers")
+@login_required
+def view_followers(user_id):
+    db = get_db()
+    owner_row = db.execute("SELECT id, name FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not owner_row:
+        current_app.logger.info("view_followers: owner not found for user_id=%s", user_id)
+        abort(404)
+
+    rows = db.execute("""
+        SELECT u.id, u.name, u.profile_photo, u.city, u.district, u.state
+        FROM follow f
+        JOIN users u ON f.follower_id = u.id
+        WHERE f.target_id = ?
+        ORDER BY f.created_at DESC
+        LIMIT 500
+    """, (user_id,)).fetchall()
+
+    # who the current logged-in user follows (so we can show follow/unfollow buttons)
+    me = session.get("user_id")
+    following_set = set()
+    if me:
+        fr = db.execute("SELECT target_id FROM follow WHERE follower_id = ?", (me,)).fetchall()
+        following_set = {r[0] for r in fr}
+
+    owner = {k: owner_row[k] for k in owner_row.keys()}
+    people = [{k: r[k] for k in r.keys()} for r in rows]
+
+    current_app.logger.info("view_followers: owner=%s, rows=%s, following_set_len=%s", owner, len(people), len(following_set))
+    return render_template("followers_list.html", owner=owner, people=people, mode="followers", following_set=following_set)
+
+
+@app.get("/farmer/<int:user_id>/following")
+@login_required
+def view_following(user_id):
+    db = get_db()
+    owner_row = db.execute("SELECT id, name FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not owner_row:
+        current_app.logger.info("view_following: owner not found for user_id=%s", user_id)
+        abort(404)
+
+    rows = db.execute("""
+        SELECT u.id, u.name, u.profile_photo, u.city, u.district, u.state
+        FROM follow f
+        JOIN users u ON f.target_id = u.id
+        WHERE f.follower_id = ?
+        ORDER BY f.created_at DESC
+        LIMIT 500
+    """, (user_id,)).fetchall()
+
+    me = session.get("user_id")
+    following_set = set()
+    if me:
+        fr = db.execute("SELECT target_id FROM follow WHERE follower_id = ?", (me,)).fetchall()
+        following_set = {r[0] for r in fr}
+
+    owner = {k: owner_row[k] for k in owner_row.keys()}
+    people = [{k: r[k] for k in r.keys()} for r in rows]
+
+    current_app.logger.info("view_following: owner=%s, rows=%s, following_set_len=%s", owner, len(people), len(following_set))
+    return render_template("followers_list.html", owner=owner, people=people, mode="following", following_set=following_set)
+# -------------------------------------------------------------------------------
+
+@app.get("/dev/follow-data")
+@login_required
+def dev_follow_data():
+    # call: /dev/follow-data?user_id=3&type=followers  OR type=following
+    uid = int(request.args.get("user_id") or 0)
+    typ = (request.args.get("type") or "followers").lower()
+    db = get_db()
+    if typ == "followers":
+        rows = db.execute("SELECT follower_id, target_id, created_at FROM follow WHERE target_id = ? ORDER BY created_at DESC", (uid,)).fetchall()
+    else:
+        rows = db.execute("SELECT follower_id, target_id, created_at FROM follow WHERE follower_id = ? ORDER BY created_at DESC", (uid,)).fetchall()
+
+    # also show user row
+    user = db.execute("SELECT id, name, email FROM users WHERE id = ?", (uid,)).fetchone()
+    return jsonify({
+        "query_for": {"user_id": uid, "type": typ},
+        "user": dict(user) if user else None,
+        "rows": [dict(r) for r in rows]
+    })
+
+# add to app.py (near other routes)
+@app.get("/find-farmers")
+@login_required
+def find_farmers():
+    """
+    Serve templates/find_farmers.html (the template you provided).
+    Query params:
+      - q: search text (matches name, city, district, state, email)
+      - state: exact state filter
+      - district: exact district filter
+      - page: 1-based page number
+    """
+    db = get_db()
+
+    # Read query params
+    q = (request.args.get("q") or "").strip()
+    state = (request.args.get("state") or "").strip()
+    district = (request.args.get("district") or "").strip()
+    try:
+        page = max(1, int(request.args.get("page") or 1))
+    except Exception:
+        page = 1
+
+    per_page = 12   # matches your UI; change if you prefer
+    offset = (page - 1) * per_page
+
+    # Build WHERE clauses safely
+    wheres = ["1=1"]
+    params = []
+
+    if q:
+        like = f"%{q}%"
+        wheres.append("(name LIKE ? OR city LIKE ? OR district LIKE ? OR state LIKE ? OR email LIKE ?)")
+        params.extend([like, like, like, like, like])
+
+    if state:
+        wheres.append("state = ?")
+        params.append(state)
+
+    if district:
+        wheres.append("district = ?")
+        params.append(district)
+
+    where_sql = " AND ".join(wheres)
+
+    # main query: get paginated farmers
+    sql = f"""
+      SELECT id, name, profile_photo, city, district, state
+      FROM users
+      WHERE {where_sql}
+      ORDER BY name COLLATE NOCASE ASC
+      LIMIT ? OFFSET ?
+    """
+    params_for_page = params + [per_page, offset]
+    rows = db.execute(sql, params_for_page).fetchall()
+    farmers = [dict(r) for r in rows]
+
+    # total count for pagination
+    count_sql = f"SELECT COUNT(*) AS cnt FROM users WHERE {where_sql}"
+    total_row = db.execute(count_sql, params).fetchone()
+    total = total_row["cnt"] if total_row else 0
+
+    # supply lists for state/district filters (distinct values)
+    try:
+        states_rows = db.execute("SELECT DISTINCT state FROM users WHERE state IS NOT NULL AND state != '' ORDER BY state").fetchall()
+        states = [r["state"] for r in states_rows if r["state"]]
+    except Exception:
+        states = []
+
+    try:
+        districts_rows = db.execute("SELECT DISTINCT district FROM users WHERE district IS NOT NULL AND district != '' ORDER BY district").fetchall()
+        districts = [r["district"] for r in districts_rows if r["district"]]
+    except Exception:
+        districts = []
+
+    # following_set: who current user follows (so template can show Follow/Following)
+    uid = session.get("user_id")
+    following_set = set()
+    if uid:
+        try:
+            fr = db.execute("SELECT target_id FROM follow WHERE follower_id = ?", (uid,)).fetchall()
+            following_set = {r["target_id"] for r in fr}
+        except Exception:
+            following_set = set()
+
+    # expose pagination values used by template
+    context = {
+        "farmers": farmers,
+        "q": q,
+        "state": state,
+        "district": district,
+        "states": states,
+        "districts": districts,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "following_set": following_set,
+        # `user` comes from your inject_user_and_now() context processor, but include safe fallback
+        "user": g.get("user")
+    }
+
+    return render_template("find_farmers.html", **context)
+
+def _save_uploaded_file(f, prefix="video"):
+    # returns saved filename
+    ext = f.filename.rsplit(".", 1)[-1].lower()
+    filename = secure_filename(f"{prefix}{session['user_id']}_{int(_dt.utcnow().timestamp())}.{ext}")
+    path = os.path.join(UPLOAD_DIR, filename)
+    f.save(path)
+    return filename
+
+@app.get("/videos")
+def videos_public():
+    """Public gallery: shows latest videos; accessible to non-logged users too."""
+    db = get_db()
+    rows = db.execute("""
+       SELECT v.id, v.owner_id, v.filename, v.title, v.description, v.vid_type, v.created_at,
+              u.name AS owner_name, u.profile_photo
+       FROM growlog_videos v
+       JOIN users u ON u.id = v.owner_id
+       ORDER BY v.created_at DESC
+       LIMIT 50
+    """).fetchall()
+    videos = [dict(r) for r in rows]
+    return render_template("videos.html", videos=videos)
+
+@app.get("/dashboard/growlog")
+@login_required
+def growlog_dashboard():
+    """Farmer dashboard: list of user's own videos + upload form"""
+    uid = session.get("user_id")
+    db = get_db()
+    rows = db.execute("""
+       SELECT id, filename, title, description, vid_type, created_at, updated_at
+       FROM growlog_videos
+       WHERE owner_id = ?
+       ORDER BY created_at DESC
+    """, (uid,)).fetchall()
+    videos = [dict(r) for r in rows]
+    return render_template("growlog_dashboard.html", videos=videos)
+
+@app.post("/dashboard/growlog/upload")
+@login_required
+def growlog_upload():
+    uid = session.get("user_id")
+    f = request.files.get("video")
+    title = (request.form.get("title") or "").strip()
+    description = (request.form.get("description") or "").strip()
+    vid_type = (request.form.get("vid_type") or "").strip()
+    if not f or f.filename == "":
+        flash("Please choose a video file to upload.", "warning")
+        return redirect(url_for("growlog_dashboard"))
+    if not _allowed(f.filename):
+        flash("Unsupported file type. Use mp4/webm/ogg/mov/etc.", "danger")
+        return redirect(url_for("growlog_dashboard"))
+    # Save
+    try:
+        fname = _save_uploaded_file(f, prefix="growlog_")
+        with get_db() as conn:
+            conn.execute("""INSERT INTO growlog_videos (owner_id, filename, title, description, vid_type) 
+                            VALUES (?, ?, ?, ?, ?)""",
+                         (uid, fname, title, description, vid_type))
+        flash("Video uploaded.", "success")
+    except Exception:
+        current_app.logger.exception("growlog upload failed")
+        flash("Upload failed.", "danger")
+    return redirect(url_for("growlog_dashboard"))
+
+@app.post("/dashboard/growlog/delete/<int:vid_id>")
+@login_required
+def growlog_delete(vid_id):
+    uid = session.get("user_id")
+    db = get_db()
+    r = db.execute("SELECT filename, owner_id FROM growlog_videos WHERE id = ?", (vid_id,)).fetchone()
+    if not r:
+        flash("Video not found.", "warning")
+        return redirect(url_for("growlog_dashboard"))
+    if r["owner_id"] != uid:
+        abort(403)
+    fname = r["filename"]
+    try:
+        with db:
+            db.execute("DELETE FROM growlog_videos WHERE id = ?", (vid_id,))
+            # delete file if present
+            path = os.path.join(UPLOAD_DIR, fname)
+            try:
+                if os.path.exists(path): os.remove(path)
+            except Exception:
+                current_app.logger.warning("Could not remove file %s", path)
+        flash("Video deleted.", "info")
+    except Exception:
+        current_app.logger.exception("growlog delete failed")
+        flash("Delete failed.", "danger")
+    return redirect(url_for("growlog_dashboard"))
+
+@app.post("/api/growlog/like/<int:vid_id>")
+@login_required
+def api_growlog_like(vid_id):
+    uid = session.get("user_id")
+    db = get_db()
+    try:
+        with db:
+            db.execute("INSERT OR IGNORE INTO growlog_likes (video_id, user_id) VALUES (?, ?)", (vid_id, uid))
+            # create notification to owner (if liker is not owner)
+            r = db.execute("SELECT owner_id FROM growlog_videos WHERE id = ?", (vid_id,)).fetchone()
+            if r and r["owner_id"] and r["owner_id"] != uid:
+                payload = json.dumps({"video_id": vid_id, "kind": "like", "by": uid})
+                db.execute("INSERT INTO notifications (user_id, actor_id, verb, payload, is_read) VALUES (?, ?, ?, ?, 0)",
+                           (r["owner_id"], uid, "video_like", payload))
+        # return like count
+        cnt = db.execute("SELECT COUNT(*) FROM growlog_likes WHERE video_id = ?", (vid_id,)).fetchone()[0]
+        return jsonify({"ok": True, "likes": cnt})
+    except Exception:
+        current_app.logger.exception("like failed")
+        return jsonify({"ok": False}), 500
+
+@app.post("/api/growlog/unlike/<int:vid_id>")
+@login_required
+def api_growlog_unlike(vid_id):
+    uid = session.get("user_id")
+    db = get_db()
+    try:
+        with db:
+            db.execute("DELETE FROM growlog_likes WHERE video_id = ? AND user_id = ?", (vid_id, uid))
+        cnt = db.execute("SELECT COUNT(*) FROM growlog_likes WHERE video_id = ?", (vid_id,)).fetchone()[0]
+        return jsonify({"ok": True, "likes": cnt})
+    except Exception:
+        current_app.logger.exception("unlike failed")
+        return jsonify({"ok": False}), 500
+
+@app.post("/api/growlog/comment/<int:vid_id>")
+@login_required
+def api_growlog_comment(vid_id):
+    uid = session.get("user_id")
+    text = (request.form.get("comment") or "").strip()
+    if not text:
+        return jsonify({"ok": False, "error": "empty"}), 400
+    db = get_db()
+    try:
+        with db:
+            db.execute("INSERT INTO growlog_comments (video_id, user_id, comment) VALUES (?, ?, ?)", (vid_id, uid, text))
+            r = db.execute("SELECT owner_id FROM growlog_videos WHERE id = ?", (vid_id,)).fetchone()
+            if r and r["owner_id"] and r["owner_id"] != uid:
+                payload = json.dumps({"video_id": vid_id, "kind": "comment", "by": uid, "comment": text[:250]})
+                db.execute("INSERT INTO notifications (user_id, actor_id, verb, payload, is_read) VALUES (?, ?, ?, ?, 0)",
+                           (r["owner_id"], uid, "video_comment", payload))
+        # return comments (simple)
+        rows = db.execute("""
+           SELECT c.id, c.comment, c.created_at, u.id as user_id, u.name AS user_name, u.profile_photo
+           FROM growlog_comments c JOIN users u ON u.id = c.user_id
+           WHERE c.video_id = ? ORDER BY c.created_at ASC
+        """, (vid_id,)).fetchall()
+        items = [dict(r) for r in rows]
+        return jsonify({"ok": True, "comments": items})
+    except Exception:
+        current_app.logger.exception("comment failed")
+        return jsonify({"ok": False}), 500
+
+@app.get("/api/growlog/stats/<int:vid_id>")
+def api_growlog_stats(vid_id):
+    db = get_db()
+    likes = db.execute("SELECT COUNT(*) FROM growlog_likes WHERE video_id = ?", (vid_id,)).fetchone()[0]
+    comments = db.execute("SELECT COUNT(*) FROM growlog_comments WHERE video_id = ?", (vid_id,)).fetchone()[0]
+    return jsonify({"ok": True, "likes": likes, "comments": comments})
+
+@app.get("/api/growlog/comments/<int:vid_id>")
+def api_growlog_comments_get(vid_id):
+    db = get_db()
+    rows = db.execute("""
+       SELECT c.id, c.comment, c.created_at, u.id AS user_id, u.name AS user_name, u.profile_photo
+       FROM growlog_comments c JOIN users u ON u.id = c.user_id
+       WHERE c.video_id = ? ORDER BY c.created_at ASC
+    """, (vid_id,)).fetchall()
+    return jsonify({"ok": True, "comments": [dict(r) for r in rows]})
+
+@app.get("/api/growlog/preview")
+def api_growlog_preview():
+    lim = int(request.args.get("limit") or 4)
+    db = get_db()
+    rows = db.execute("""
+       SELECT v.id, v.filename, v.title, v.created_at, u.name as owner_name
+       FROM growlog_videos v JOIN users u ON u.id = v.owner_id
+       ORDER BY v.created_at DESC LIMIT ?
+    """, (lim,)).fetchall()
+    videos = []
+    for r in rows:
+        videos.append({
+            "id": r["id"],
+            "title": r["title"],
+            "created_at": r["created_at"],
+            "owner_name": r["owner_name"],
+            "video_url": url_for("static", filename="uploads/" + r["filename"])
+        })
+    return jsonify({"ok": True, "videos": videos})
+
+# add near other imports at top if not already present
+
+
+# --- Force-download route for growlog videos ---
+@app.get("/download/video/<int:video_id>")
+def download_video_route(video_id):
+    db = get_db()
+    row = db.execute("SELECT filename FROM growlog_videos WHERE id = ?", (video_id,)).fetchone()
+    if not row:
+        abort(404)
+    filename = row["filename"]
+    return send_from_directory(UPLOAD_DIR, filename, as_attachment=True)
+
+
+
+if __name__ == "__main__":
+    app.run()
+

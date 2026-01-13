@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Find Farmers{% endblock %}
+
+{% block head_extra %}
+<style>
+/* professional clean search + card layout */
+.find-header { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+.search-input {
+  flex:1;
+  display:flex;
+  gap:8px;
+  align-items:center;
+  background:#fff;
+  border:1px solid #e6e9eb;
+  border-radius:8px;
+  padding:8px 10px;
+  box-shadow: 0 2px 6px rgba(15,60,20,0.02);
+}
+.search-input input { border:0; outline:0; font-size:1rem; width:100%; padding:6px 8px; }
+.search-input .btn { white-space:nowrap; }
+
+.filters { display:flex; gap:8px; align-items:center; min-width:320px; }
+.card-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:16px; }
+.result-card {
+  display:flex;
+  gap:12px;
+  padding:14px;
+  background:#fff;
+  border-radius:10px;
+  border:1px solid #e6e9eb;
+  align-items:center;
+  box-shadow: 0 6px 18px rgba(10,40,20,0.02);
+}
+.result-avatar { width:84px; height:84px; border-radius:10px; object-fit:cover; flex-shrink:0; background:linear-gradient(180deg,#f3faf3,#fff); display:flex; align-items:center; justify-content:center; font-weight:700; color:#1b5d2b; font-size:1.4rem; border:1px solid rgba(15,60,20,0.03); }
+.result-body { flex:1; min-width:0; }
+.result-title { display:flex; gap:8px; align-items:center; justify-content:space-between; }
+.result-title .name { font-weight:700; color:#164f27; font-size:1.05rem; }
+.result-meta { color:#6c7d6b; font-size:0.95rem; margin-top:6px; }
+.result-actions { display:flex; gap:8px; margin-top:10px; align-items:center; }
+.btn-outline-follow { border:1px solid #1f8f3f; color:#1f8f3f; background:transparent; padding:6px 10px; border-radius:8px; }
+.btn-following { background:#1f8f3f; color:#fff; padding:6px 10px; border-radius:8px; border:0; }
+
+.pagination { text-align:center; margin-top:18px; color:#6c7d6b; }
+.empty-note { text-align:center; color:#6c7d6b; padding:28px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-dashboard">
+  <div class="find-header">
+    <div style="flex:1;">
+      <div style="font-size:1.15rem; font-weight:700; color:#164f27; margin-bottom:6px;"><i class="fas fa-search"></i> Find Farmers</div>
+      <div class="search-input" role="search" aria-label="Find farmers">
+        <input id="q" name="q" placeholder="Search by name (e.g., Kavya)" value="{{ q }}" aria-label="Search by name">
+        <button id="searchBtn" class="btn btn-upload">Search</button>
+      </div>
+    </div>
+
+    <div class="filters">
+      <select id="state" class="form-control">
+        <option value="">All states</option>
+        {% for s in states %}
+          <option value="{{ s }}" {% if s==state %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+
+      <select id="district" class="form-control">
+        <option value="">All districts</option>
+        {% for d in districts %}
+          <option value="{{ d }}" {% if d==district %}selected{% endif %}>{{ d }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  {% if farmers %}
+    <div class="card-grid" id="resultsGrid">
+      {% for f in farmers %}
+        <div class="result-card" data-id="{{ f.id }}">
+          {% if f.profile_photo %}
+            <img src="{{ url_for('static', filename='uploads/' ~ f.profile_photo) }}" class="result-avatar" alt="avatar">
+          {% else %}
+            <div class="result-avatar">{{ f.name[0]|upper }}</div>
+          {% endif %}
+
+          <div class="result-body">
+            <div class="result-title">
+              <div>
+                <div class="name">{{ f.name }}</div>
+                <div style="color:#6c7d6b; font-size:0.9rem;">ID: {{ f.id }}</div>
+              </div>
+              <div style="text-align:right;">
+                <a class="btn btn-sm btn-outline-success" href="{{ url_for('view_farmer', uid=f.id) }}"><i class="fas fa-eye"></i> View Profile</a>
+              </div>
+            </div>
+
+            <div class="result-meta">
+              {% if f.city %}{{ f.city }}{% endif %}{% if f.city and f.district %}, {% endif %}{% if f.district %}{{ f.district }}{% endif %}{% if f.state %}, {{ f.state }}{% endif %}
+            </div>
+
+            <div class="result-actions">
+              {% if f.id != (user.id if user else None) %}
+                {% set is_following = (f.id in following_set) %}
+                <button class="follow-btn {% if is_following %}btn-following{% else %}btn-outline-follow{% endif %}"
+                        data-target-id="{{ f.id }}">
+                  {% if is_following %}<i class="fas fa-user-check"></i> Following{% else %}<i class="fas fa-user-plus"></i> Follow{% endif %}
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="pagination">
+      {% set last_page = (total // per_page) + (1 if (total % per_page) else 0) %}
+      Page {{ page }} of {{ last_page or 1 }} — {{ total }} results
+      <div style="margin-top:8px;">
+        {% if page > 1 %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('find_farmers') }}?q={{ q }}&state={{ state }}&district={{ district }}&page={{ page-1 }}">Prev</a>
+        {% endif %}
+        {% if page < (last_page or 1) %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('find_farmers') }}?q={{ q }}&state={{ state }}&district={{ district }}&page={{ page+1 }}">Next</a>
+        {% endif %}
+      </div>
+    </div>
+
+  {% else %}
+    <div class="empty-note">No farmers found. Try a different name or clear filters.</div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// simple search redirect
+const qInput = document.getElementById('q');
+const stateSelect = document.getElementById('state');
+const districtSelect = document.getElementById('district');
+const searchBtn = document.getElementById('searchBtn');
+
+function goSearch() {
+  const params = new URLSearchParams();
+  if (qInput.value) params.append('q', qInput.value.trim());
+  if (stateSelect.value) params.append('state', stateSelect.value);
+  if (districtSelect.value) params.append('district', districtSelect.value);
+  params.append('page', '1');
+  window.location = `${location.pathname}?${params.toString()}`;
+}
+searchBtn.addEventListener('click', goSearch);
+qInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); goSearch(); } });
+
+// follow/unfollow action
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.follow-btn');
+  if (!btn) return;
+  const target = btn.dataset.targetId;
+  const isFollow = btn.classList.contains('btn-outline-follow');
+  const url = isFollow ? `/api/follow/${target}` : `/api/unfollow/${target}`;
+  btn.disabled = true;
+  try {
+    const res = await fetch(url, { method: 'POST', headers: {'X-Requested-With':'XMLHttpRequest'} });
+    const data = await res.json();
+    if (data.ok) {
+      if (data.action === 'followed') {
+        btn.classList.remove('btn-outline-follow');
+        btn.classList.add('btn-following');
+        btn.innerHTML = '<i class="fas fa-user-check"></i> Following';
+      } else {
+        btn.classList.remove('btn-following');
+        btn.classList.add('btn-outline-follow');
+        btn.innerHTML = '<i class="fas fa-user-plus"></i> Follow';
+      }
+    } else {
+      alert('Error: ' + (data.error || 'unknown'));
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Network error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}

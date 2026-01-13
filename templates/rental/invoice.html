@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt — INV-{{ rr.id }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:20px; color:#222; }
+    header { display:flex; justify-content:space-between; align-items:center; }
+    .meta { text-align:right; font-size:0.95rem; color:#444; }
+    .box { border:1px solid #eee; padding:16px; margin-top:18px; border-radius:6px; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    table th, table td { padding:8px; border-bottom:1px solid #eee; text-align:left; }
+    .right { text-align:right; }
+    .total { font-weight:700; font-size:1.1rem; }
+    footer { margin-top:18px; font-size:0.9rem; color:#666; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h2>KrishiNet</h2>
+      <div>Invoice #: INV-{{ rr.id }}</div>
+    </div>
+    <div class="meta">
+      <div>Date: {{ (payment.created_at or "") }}</div>
+      <div>Payment method: {{ payment.method or "—" }}</div>
+      <div>Payment ID: {{ payment.external_id or payment.id }}</div>
+    </div>
+  </header>
+
+  <div class="box">
+    <h3 style="margin:0">{{ rr.title }}</h3>
+    <div style="margin-top:6px;">Owner: <strong>{{ rr.owner_name }}</strong> — Renter: <strong>{{ rr.renter_name }}</strong></div>
+    <div style="margin-top:6px;">Duration: {{ rr.start_date }} → {{ rr.end_date }}</div>
+
+    <table>
+      <thead>
+        <tr><th>Description</th><th class="right">Amount (₹)</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ rr.requested_days }} days × ₹{{ rr.price_per_day }} / day</td>
+          <td class="right">₹{{ (rr.requested_days|default(0) * rr.price_per_day|default(0))|round(2) }}</td>
+        </tr>
+        {% if payment %}
+        <tr>
+          <td>Paid ({{ payment.method }})</td>
+          <td class="right">₹{{ payment.amount }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td class="total">Total</td>
+          <td class="right total">₹{{ payment.amount }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <div>Thank you for using KrishiNet. This is a system-generated receipt.</div>
+  </footer>
+</body>
+</html>

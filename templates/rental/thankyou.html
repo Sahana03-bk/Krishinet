@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Thank you — Payment{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <div id="alertArea"></div>
+
+  <div class="card p-4">
+    <h4 id="pageHeading">{{ 'Thank you — payment confirmed' if verified else 'Thank you — payment in progress' }}</h4>
+    <p id="subText" class="text-muted">
+      {% if verified %}
+        Your payment was confirmed. You can download your receipt below.
+      {% else %}
+        We're verifying your payment. This page will automatically update when the payment is confirmed and open your receipt.
+      {% endif %}
+    </p>
+
+    <div id="statusText" class="mb-3">
+      {% if verified %}
+        Payment status: <strong>completed</strong>
+      {% else %}
+        Payment status: <strong>pending</strong> — waiting...
+      {% endif %}
+    </div>
+
+    <div>
+      <a id="returnBtn" class="btn btn-outline-secondary" href="{{ url_for('index') }}">Return to Dashboard</a>
+      <a id="receiptBtn" class="btn btn-success ms-2" style="display: none;" target="_blank">Download Receipt</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const paymentId = "{{ payment_id or '' }}";
+  const verified = {{ 'true' if verified else 'false' }};
+
+  const statusText = document.getElementById('statusText');
+  const receiptBtn = document.getElementById('receiptBtn');
+  const alertArea = document.getElementById('alertArea');
+
+  function showSuccess(msg) {
+    alertArea.innerHTML = '<div class="alert alert-success">\
+      <strong>Booking confirmed.</strong> ' + (msg || '') + ' \
+      <a class="btn btn-sm btn-outline-secondary ms-2" id="goOrders">Open Receipt</a></div>';
+    const go = document.getElementById('goOrders');
+    if (go) go.addEventListener('click', () => {
+      window.open('/rental/payment/' + paymentId + '/receipt', '_blank');
+    });
+  }
+
+  if (!paymentId) {
+    statusText.textContent = 'No payment id provided.';
+    return;
+  }
+
+  // If the server already verified, show download immediately
+  if (verified) {
+    statusText.innerHTML = 'Payment status: <strong>completed</strong>';
+    receiptBtn.style.display = 'inline-block';
+    receiptBtn.href = '/rental/payment/' + paymentId + '/receipt';
+    // show a success banner
+    showSuccess('Receipt is available for download.');
+    return;
+  }
+
+  // Otherwise poll the payment status endpoint until it becomes completed
+  let attempts = 0;
+  const maxAttempts = 40;
+  const intervalMs = 2000;
+
+  async function poll() {
+    attempts++;
+    try {
+      const resp = await fetch('/rental/payment/' + paymentId + '/status', { credentials: 'same-origin' });
+      if (!resp.ok) {
+        statusText.textContent = 'Could not verify payment status. Please refresh later.';
+        return;
+      }
+      const j = await resp.json();
+      if (j.ok) {
+        const s = j.status;
+        if (s === 'completed' || s === 'paid') {
+          statusText.innerHTML = 'Payment status: <strong>completed</strong>';
+          receiptBtn.style.display = 'inline-block';
+          receiptBtn.href = '/rental/payment/' + paymentId + '/receipt';
+          showSuccess('Receipt will open in a new tab.');
+          // open receipt in new tab automatically
+          window.open('/rental/payment/' + paymentId + '/receipt', '_blank');
+          return;
+        }
+        if (s === 'refunded' || s === 'failed' || s === 'cancelled') {
+          statusText.innerHTML = 'Payment status: <strong>' + s + '</strong>';
+          alert('Payment status: ' + s + '. Please contact support if you believe this is an error.');
+          return;
+        }
+        // still pending
+        statusText.innerHTML = 'Payment status: <strong>' + s + '</strong> — waiting...';
+      }
+    } catch (err) {
+      console.error('poll error', err);
+      statusText.textContent = 'Could not verify payment status. Please refresh later.';
+      return;
+    }
+
+    if (attempts < maxAttempts) {
+      setTimeout(poll, intervalMs);
+    } else {
+      statusText.textContent = 'Could not verify payment status. Please refresh later.';
+    }
+  }
+
+  // start polling
+  poll();
+})();
+</script>
+{% endblock %}

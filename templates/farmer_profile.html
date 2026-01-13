@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{{ farmer.name }} — Profile{% endblock %}
+
+{% block head_extra %}
+<style>
+.profile-wrap { max-width:900px; margin:18px auto; padding:18px; }
+.profile-card {
+  display:flex;
+  gap:18px;
+  background:#fff;
+  border:1px solid #e6e9eb;
+  border-radius:12px;
+  padding:18px;
+  box-shadow:0 8px 20px rgba(10,40,20,0.02);
+  align-items:flex-start;
+}
+.profile-avatar-lg { width:120px; height:120px; border-radius:12px; object-fit:cover; background:linear-gradient(180deg,#f3faf3,#fff); display:flex; align-items:center; justify-content:center; font-weight:800; color:#1b5d2b; font-size:2rem; border:1px solid rgba(15,60,20,0.03); }
+.profile-info { flex:1; }
+.profile-name { font-size:1.6rem; color:#164f27; font-weight:800; margin-bottom:6px; }
+.profile-location { color:#6c7d6b; margin-bottom:8px; }
+.profile-chips { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+.chip { background:#f6fbf6; border:1px solid rgba(15,60,20,0.03); padding:8px 12px; border-radius:12px; color:#17642a; font-weight:600; }
+.profile-actions { display:flex; gap:10px; margin-top:12px; align-items:center; }
+.meta-links { margin-top:14px; display:flex; gap:14px; color:#1f6fea; }
+.posts-section { margin-top:20px; padding-top:10px; border-top:1px dashed #edf1f2; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-dashboard profile-wrap">
+  <div class="profile-card">
+    {% if farmer.profile_photo %}
+      <img src="{{ url_for('static', filename='uploads/' ~ farmer.profile_photo) }}" class="profile-avatar-lg" alt="avatar">
+    {% else %}
+      <div class="profile-avatar-lg">{{ farmer.name[0]|upper }}</div>
+    {% endif %}
+
+    <div class="profile-info">
+      <div class="profile-name">{{ farmer.name }}</div>
+      <div class="profile-location">
+        {% if farmer.city %}{{ farmer.city }}{% endif %}{% if farmer.city and farmer.district %}, {% endif %}{% if farmer.district %}{{ farmer.district }}{% endif %}{% if farmer.state %}, {{ farmer.state }}{% endif %}
+      </div>
+
+      <div class="profile-chips">
+        <div class="chip"><i class="fas fa-envelope"></i> {{ farmer.email }}</div>
+        <div class="chip"><i class="fas fa-phone"></i> {{ farmer.phone }}</div>
+        <div class="chip">ID: {{ farmer.id }}</div>
+      </div>
+
+      <div class="profile-actions">
+       {% if farmer.id != (user.id if user else None) %}
+  {% if is_following %}
+    <!-- When already following, show a clear 'Unfollow' CTA with danger style -->
+    <button id="followBtn" class="btn btn-danger" data-target-id="{{ farmer.id }}" data-action="unfollow">
+      <i class="fas fa-user-times"></i> Unfollow
+    </button>
+  {% else %}
+    <button id="followBtn" class="btn btn-outline-follow" data-target-id="{{ farmer.id }}" data-action="follow">
+      <i class="fas fa-user-plus"></i> Follow
+    </button>
+  {% endif %}
+
+  <a href="{{ url_for('view_followers', user_id=farmer.id) }}" class="btn btn-link"><i class="fas fa-users"></i> {{ followers }} Followers</a>
+  <a href="{{ url_for('view_following', user_id=farmer.id) }}" class="btn btn-link"><i class="fas fa-user-friends"></i> {{ following }} Following</a>
+{% endif %}     
+ </div>
+
+      <div class="meta-links">
+        <!-- placeholder links (messages/bookmarks etc.) -->
+        <a href="#"><i class="fas fa-envelope"></i> Message</a>
+        <a href="#"><i class="fas fa-map-marker-alt"></i> Farms</a>
+      </div>
+
+      <div class="posts-section">
+        <h5>Posts</h5>
+        <p class="text-muted">No posts yet.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('#followBtn');
+  if (!btn) return;
+
+  const target = btn.dataset.targetId;
+  const action = btn.dataset.action || (btn.classList.contains('btn-danger') ? 'unfollow' : 'follow');
+
+  if (action === 'unfollow') {
+    // confirm before unfollowing
+    if (!confirm('Are you sure you want to unfollow this farmer?')) return;
+  }
+
+  btn.disabled = true;
+  const url = action === 'follow' ? `/api/follow/${target}` : `/api/unfollow/${target}`;
+
+  try {
+    const res = await fetch(url, { method: 'POST', headers: {'X-Requested-With':'XMLHttpRequest'} });
+    const data = await res.json();
+    if (data.ok) {
+      // Update UI: replace button with opposite action
+      if (data.action === 'followed') {
+        btn.classList.remove('btn-danger');
+        btn.classList.remove('btn-outline-follow');
+        btn.classList.add('btn-following');
+        btn.dataset.action = 'unfollow';
+        btn.innerHTML = '<i class="fas fa-user-check"></i> Following';
+      } else if (data.action === 'unfollowed') {
+        btn.classList.remove('btn-following');
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-outline-follow');
+        btn.dataset.action = 'follow';
+        btn.innerHTML = '<i class="fas fa-user-plus"></i> Follow';
+      }
+
+      // Optionally update follower count links text if present
+      try {
+        const followersLink = document.querySelector('a[href$="/followers"]');
+        if (followersLink && typeof data.followers !== 'undefined') {
+          followersLink.innerHTML = `<i class="fas fa-users"></i> ${data.followers} Followers`;
+        }
+      } catch (err) {
+        // ignore
+      }
+    } else {
+      alert('Could not complete request: ' + (data.error || 'unknown'));
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Network or server error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+
+{% endblock %}

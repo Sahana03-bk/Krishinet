@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h3 class="mb-0">Notifications</h3>
+    <div>
+      <button id="markAll" class="btn btn-sm btn-outline-secondary">Mark all read</button>
+      <a class="btn btn-sm btn-link" href="{{ url_for('index') }}">Home</a>
+    </div>
+  </div>
+
+  <div id="notesList">
+    {% if notifications %}
+      <div class="list-group">
+        {% for n in notifications %}
+          {# Ensure payload is available in template as object (your backend already parses it) #}
+          <a href="#" class="list-group-item list-group-item-action d-flex align-items-start {% if not n.is_read %}notif-item unread{% endif %}" data-note-id="{{ n.id }}" data-actor-id="{{ n.actor_id or (n.payload.get('follower_id') if n.payload else '') }}">
+            <div style="flex-shrink:0; margin-right:12px;">
+              {% if n.payload and n.payload.get('profile_photo') %}
+                <img src="{{ url_for('static', filename='uploads/' + n.payload.profile_photo) }}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;">
+              {% else %}
+                <div style="width:48px;height:48px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#f4faf4;color:var(--green-2);font-weight:700;">{{ (n.payload.get('follower_name')[0] if n.payload and n.payload.get('follower_name') else 'S') }}</div>
+              {% endif %}
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div class="d-flex justify-content-between">
+                <div class="fw-bold text-truncate">{{ (n.payload.get('follower_name') if n.payload else 'Someone') }}</div>
+                <div class="text-muted small">{{ n.created_at }}</div>
+              </div>
+              <div class="small text-muted">
+                {% if n.verb == 'followed' or 'follow' in (n.verb or '').lower() %}
+                  started following you
+                {% else %}
+                  {{ n.verb }}
+                {% endif %}
+              </div>
+              {% if n.payload and n.payload.get('location') %}
+                <div class="small text-muted mt-1">{{ n.payload.location }}</div>
+              {% endif %}
+            </div>
+            <div style="margin-left:12px; align-self:center;">
+              {% if not n.is_read %}
+                <button class="btn btn-sm btn-primary mark-read">Mark read</button>
+              {% else %}
+                <span class="text-muted small">Read</span>
+              {% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-muted">No notifications.</p>
+    {% endif %}
+  </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  // Mark-read handlers for list items
+  document.querySelectorAll('.mark-read').forEach(function(btn){
+    btn.addEventListener('click', async function(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      const li = btn.closest('[data-note-id]');
+      const nid = li.getAttribute('data-note-id');
+      try {
+        const r = await fetch('/api/notifications/mark_read/' + nid, { method: 'POST', credentials: 'same-origin' });
+        const j = await r.json();
+        if (j.ok) {
+          btn.remove();
+          li.classList.remove('notif-item','unread');
+          // refresh badge on success
+          const b = document.getElementById('alertsBadge');
+          if (b) {
+            const js = await fetch('{{ url_for("api_notifications_unread_count") }}', { credentials: 'same-origin' }).then(r=>r.json());
+            const n = js.unread || 0;
+            if (n > 0) { b.style.display = 'inline-block'; b.textContent = n } else { b.style.display = 'none'; }
+          }
+        }
+      } catch(e) { console.error(e); }
+    });
+  });
+
+  // Mark all read
+  const markAll = document.getElementById('markAll');
+  markAll.addEventListener('click', async function(){
+    try {
+      const r = await fetch('{{ url_for("api_notifications_mark_all_read") }}', { method: 'POST', credentials: 'same-origin' });
+      const j = await r.json();
+      if (j.ok) {
+        document.querySelectorAll('[data-note-id]').forEach(function(el){
+          el.classList.remove('notif-item','unread');
+          const btn = el.querySelector('.mark-read'); if (btn) btn.remove();
+        });
+        const b = document.getElementById('alertsBadge'); if (b) b.style.display = 'none';
+      }
+    } catch(e){ console.error(e); }
+  });
+
+  // Click on item -> go to actor profile if available
+  document.querySelectorAll('[data-note-id]').forEach(function(a){
+    a.addEventListener('click', function(ev){
+      ev.preventDefault();
+      const tid = this.getAttribute('data-actor-id');
+      if (tid) window.location.href = '/farmer/' + tid;
+    });
+  });
+});
+</script>
+{% endblock %}

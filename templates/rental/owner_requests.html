@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Rental Requests — KrishiNet{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="fa-solid fa-house"></i> Back to Dashboard
+  </a>
+</div>
+
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Requests for My Rentals</h3>
+    <div class="text-muted small">Manage all incoming rental requests here</div>
+  </div>
+
+  {% if requests %}
+  <div class="list-group shadow-sm">
+    {% for r in requests %}
+    <div class="list-group-item py-3">
+      <div class="d-flex justify-content-between align-items-start flex-wrap">
+        <div>
+          <div class="fw-bold fs-5">{{ r.rental_title }}</div>
+          <div class="small text-muted">
+            Requested by <strong>{{ r.requester_name }}</strong>
+            • {{ r.start_date }} → {{ r.end_date }}
+            • {{ r.requested_days or 0 }} days
+          </div>
+          <div class="small text-muted">
+            Offered: ₹{{ r.price_offered or 0 }}
+          </div>
+        </div>
+
+        <div class="text-end mt-2 mt-md-0">
+          {% if r.status == 'requested' %}
+            <button class="btn btn-sm btn-success btn-action me-1"
+                    data-id="{{ r.id }}" data-action="accept">
+              <i class="fa-solid fa-check"></i> Accept
+            </button>
+            <button class="btn btn-sm btn-danger btn-action me-1"
+                    data-id="{{ r.id }}" data-action="reject">
+              <i class="fa-solid fa-xmark"></i> Reject
+            </button>
+          {% elif r.status == 'accepted' %}
+            <span class="badge bg-success">Accepted</span>
+            <form method="post"
+                  action="{{ url_for('rental.request_action', req_id=r.id) }}"
+                  class="d-inline">
+              <input type="hidden" name="action" value="complete">
+              <button class="btn btn-sm btn-outline-secondary ms-1">
+                <i class="fa-solid fa-flag-checkered"></i> Mark Completed
+              </button>
+            </form>
+          {% elif r.status == 'completed' %}
+            <span class="badge bg-primary">Completed</span>
+          {% elif r.status == 'rejected' %}
+            <span class="badge bg-danger">Rejected</span>
+          {% elif r.status == 'cancelled' %}
+            <span class="badge bg-warning text-dark">Cancelled</span>
+          {% elif r.status == 'paid' %}
+            <span class="badge bg-success">Paid</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ r.status|capitalize }}</span>
+          {% endif %}
+
+          <!-- View Payments -->
+          <a href="{{ url_for('profile.my_payments') }}?request_id={{ r.id }}"
+             class="btn btn-sm btn-outline-primary mt-1"
+             title="View payments for this request">
+            <i class="fa-solid fa-receipt"></i> Payments
+          </a>
+          <!-- inside each request listing for owner -->
+{% if r.is_owner and r.status in ('accepted','paid','ongoing') %}
+  <button class="btn btn-sm btn-warning request-full-pay-btn" data-req-id="{{ r.id }}">Request full payment</button>
+{% endif %}
+
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="alert alert-info">
+    <i class="fa-solid fa-circle-info"></i> No rental requests yet.
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Handle Accept / Reject / Complete actions via AJAX */
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.btn-action');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  if (!id || !action) return;
+
+  const confirmMsg = {
+    accept: 'Accept this request?',
+    reject: 'Reject this request?',
+    complete: 'Mark this request as completed?'
+  }[action] || 'Confirm this action?';
+
+  if (!confirm(confirmMsg)) return;
+
+  btn.disabled = true;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
+
+  try {
+    const res = await fetch(`/rental/request/${id}/action`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ action })
+    });
+    const j = await res.json();
+    if (j.ok) {
+      location.reload();
+    } else {
+      alert('Action failed: ' + (j.error || 'unknown'));
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
+  } catch (err) {
+    alert('Network error.');
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+});
+</script>
+
+<script>
+  document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.request-full-pay-btn');
+  if (!btn) return;
+  const reqId = btn.dataset.reqId;
+  if (!confirm('Request full payment from renter?')) return;
+
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/rental/request/${reqId}/request-full-payment`, { method: 'POST', credentials: 'same-origin' });
+    const j = await res.json();
+    if (!j.ok) {
+      alert('Failed: ' + (j.error || j.message || 'unknown'));
+    } else {
+      alert('Full payment requested. Amount due: ₹' + j.amount_due);
+      // optionally update the UI (e.g., disable button)
+      btn.textContent = 'Requested';
+      btn.classList.remove('btn-warning');
+      btn.classList.add('btn-secondary');
+    }
+  } catch (err) {
+    alert('Network error: ' + err);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+</script>
+{% endblock %}

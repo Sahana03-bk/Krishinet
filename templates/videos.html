@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}Video Gallery — KrishiNet{% endblock %}
+
+{% block content %}
+<!-- Styles for consistent video sizing -->
+<style>
+/* --- GrowLog video card layout --- */
+.video-card {
+  position: relative;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.05);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.04);
+}
+
+.video-frame {
+  position: relative;
+  width: 100%;
+  height: 220px;             /* <--- change this value to increase/decrease box height */
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;         /* Ensures uniform aspect ratio, no black bars */
+  border-radius: 8px;
+}
+
+.video-info {
+  padding: 10px 12px 14px;
+}
+.video-info h5 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #174d2c;
+  margin-bottom: 4px;
+}
+.video-info p {
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+/* like/comment/download button row */
+.video-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.video-actions .btn {
+  padding: 4px 10px;
+  font-size: 0.85rem;
+}
+</style>
+
+<div class="container-dashboard">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>GrowLog — Community Videos</h3>
+    {% if user %}
+      <a href="{{ url_for('growlog_dashboard') }}" class="btn btn-outline-secondary">My GrowLogs</a>
+    {% else %}
+      <a href="{{ url_for('login') }}" class="btn btn-outline-primary">Login to upload</a>
+    {% endif %}
+  </div>
+
+  <div class="row g-3" id="growlogList">
+    {% for v in videos %}
+      <div class="col-md-6" id="v{{ v.id }}">
+        <div class="video-card">
+          <div class="card-body">
+            <div class="d-flex gap-3 mb-2 align-items-start">
+              <div style="width:56px;">
+                {% if v.profile_photo %}
+                  <img src="{{ url_for('static', filename='uploads/' ~ v.profile_photo) }}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;">
+                {% else %}
+                  <div style="width:56px;height:56px;border-radius:8px;background:#f4faf4;display:flex;align-items:center;justify-content:center;">{{ v.owner_name[0] }}</div>
+                {% endif %}
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div class="fw-bold">{{ v.owner_name }}</div>
+                <div class="text-muted small">{{ v.created_at }}</div>
+              </div>
+            </div>
+
+            <div class="video-info">
+              <h5>{{ v.title or 'Untitled' }}</h5>
+              <p class="small text-muted">{{ v.vid_type or '' }}</p>
+
+              <div class="video-frame">
+                <video controls preload="metadata" id="player-{{ v.id }}">
+                  <source src="{{ url_for('static', filename='uploads/' ~ v.filename) }}" type="video/mp4">
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+
+              <p class="mt-2">{{ v.description or '' }}</p>
+
+              <div class="video-actions mt-2">
+                <button class="btn btn-sm btn-outline-success btn-like" data-vid="{{ v.id }}">
+                  <i class="fas fa-thumbs-up"></i> <span class="like-count" data-vid="{{ v.id }}">...</span>
+                </button>
+
+                <button class="btn btn-sm btn-outline-secondary btn-toggle-comments" data-vid="{{ v.id }}">
+                  <i class="fas fa-comment"></i> Comments (<span class="comment-count" data-vid="{{ v.id }}">...</span>)
+                </button>
+
+                <a href="{{ url_for('static', filename='uploads/' ~ v.filename) }}" download class="btn btn-sm btn-outline-success">
+                  <i class="fas fa-download"></i> Download
+                </a>
+              </div>
+            </div>
+
+            <div class="mt-2 comments-box" id="comments-{{ v.id }}" style="display:none;">
+              <div class="comments-list mb-2"></div>
+              {% if user %}
+                <form class="comment-form" data-vid="{{ v.id }}">
+                  <div class="input-group">
+                    <input name="comment" class="form-control form-control-sm" placeholder="Write a comment..." required>
+                    <button class="btn btn-sm btn-primary" type="submit">Post</button>
+                  </div>
+                </form>
+              {% else %}
+                <div class="text-muted small">Login to comment</div>
+              {% endif %}
+            </div>
+
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Pause other videos when one plays */
+document.addEventListener('play', function(e){
+  const playing = e.target;
+  if (playing.tagName.toLowerCase() !== 'video') return;
+  document.querySelectorAll('video').forEach(v=>{
+    if (v !== playing) v.pause();
+  });
+}, true);
+
+/* existing functions (likes/comments/stats) */
+async function refreshStats(vidId){
+  try {
+    const r = await fetch('/api/growlog/stats/' + vidId);
+    if (!r.ok) return;
+    const j = await r.json();
+    const likeNode = document.querySelector('.like-count[data-vid="'+vidId+'"]');
+    const commentNode = document.querySelector('.comment-count[data-vid="'+vidId+'"]');
+    if (likeNode) likeNode.textContent = j.likes || 0;
+    if (commentNode) commentNode.textContent = j.comments || 0;
+  } catch(e){ console.error(e); }
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.btn-like').forEach(btn=>{
+    btn.addEventListener('click', async function(){
+      const vid = this.getAttribute('data-vid');
+      try {
+        const r = await fetch('/api/growlog/like/' + vid, { method: 'POST', credentials: 'same-origin' });
+        const j = await r.json();
+        if (j.ok) refreshStats(vid);
+      } catch(e){ console.error(e); }
+    });
+  });
+
+  // toggle comment box + load comments
+  document.querySelectorAll('.btn-toggle-comments').forEach(btn=>{
+    btn.addEventListener('click', async function(){
+      const vid = this.getAttribute('data-vid');
+      const box = document.getElementById('comments-'+vid);
+      if (box.style.display === 'none') {
+        await refreshComments(vid);
+        box.style.display = 'block';
+      } else {
+        box.style.display = 'none';
+      }
+    });
+  });
+
+  async function refreshComments(vid) {
+    try {
+      const r = await fetch('/api/growlog/comments/' + vid);
+      if (!r.ok) return;
+      const j = await r.json();
+      const list = document.querySelector('#comments-'+vid+' .comments-list');
+      list.innerHTML = '';
+      (j.comments || []).forEach(c=>{
+        const el = document.createElement('div');
+        el.className = 'mb-2';
+        el.innerHTML = `<div class="small"><strong>${c.user_name}</strong> <span class="text-muted small">• ${c.created_at}</span></div><div>${c.comment}</div>`;
+        list.appendChild(el);
+      });
+      // update comment count
+      document.querySelector('.comment-count[data-vid="'+vid+'"]').textContent = (j.comments||[]).length;
+    } catch(e){ console.error(e); }
+  }
+
+  // comment forms
+  document.querySelectorAll('.comment-form').forEach(form=>{
+    form.addEventListener('submit', async function(ev){
+      ev.preventDefault();
+      const vid = this.getAttribute('data-vid');
+      const input = this.querySelector('input[name=comment]');
+      const val = input.value.trim();
+      if (!val) return;
+      try {
+        const formData = new FormData();
+        formData.append('comment', val);
+        const r = await fetch('/api/growlog/comment/' + vid, { method: 'POST', body: formData, credentials: 'same-origin' });
+        const j = await r.json();
+        if (j.ok) {
+          input.value = '';
+          const list = document.querySelector('#comments-'+vid+' .comments-list');
+          list.innerHTML = '';
+          (j.comments || []).forEach(c=>{
+            const el = document.createElement('div');
+            el.className = 'mb-2';
+            el.innerHTML = `<div class="small"><strong>${c.user_name}</strong> <span class="text-muted small">• ${c.created_at}</span></div><div>${c.comment}</div>`;
+            list.appendChild(el);
+          });
+          document.querySelector('.comment-count[data-vid="'+vid+'"]').textContent = (j.comments||[]).length;
+        }
+      } catch(e){ console.error(e); }
+    });
+  });
+
+  // initial stats refresh
+  document.querySelectorAll('.like-count').forEach(el=> refreshStats(el.getAttribute('data-vid')));
+  document.querySelectorAll('.comment-count').forEach(el=> refreshStats(el.getAttribute('data-vid')));
+});
+</script>
+{% endblock %}

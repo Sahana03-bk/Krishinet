@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KrishiNet - Farmer Registration & Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <style>
+    body { background-color:#f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .registration-container{ background:#fff; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,.1); overflow:hidden; margin:2rem auto; max-width:1000px; }
+    .registration-left{ background:linear-gradient(135deg,#4CAF50,#2E7D32); color:#fff; padding:3rem; }
+    .registration-right{ padding:2rem; }
+    .registration-logo{ font-size:1.8rem; font-weight:700; color:#4CAF50; margin-bottom:1.5rem; }
+    .feature-list{ list-style:none; padding:0; margin-top:2rem; }
+    .feature-list li{ margin-bottom:.8rem; }
+    .feature-list i{ color:#C8E6C9; margin-right:10px; }
+
+    .form-title{ font-weight:600; margin-bottom:1.5rem; color:#333; }
+    .step-progress-container{ display:flex; justify-content:center; }
+    .step-progress{ display:flex; justify-content:space-between; width:150px; }
+    .step{ width:30px; height:30px; border-radius:50%; background:#e9ecef; display:flex; align-items:center; justify-content:center; font-weight:700; color:#6c757d; }
+    .step.active{ background:#4CAF50; color:#fff; }
+
+    .form-group{ margin-bottom:1.2rem; }
+    .form-group label{ font-weight:500; margin-bottom:.5rem; color:#495057; }
+    .form-control{ padding:.75rem; border-radius:5px; border:1px solid #ced4da; }
+    .form-control:focus{ border-color:#4CAF50; box-shadow:0 0 0 .2rem rgba(76,175,80,.25); }
+    .btn-primary{ background:#4CAF50; border-color:#4CAF50; padding:.75rem; font-weight:600; width:100%; }
+    .btn-primary:hover{ background:#3d8b40; border-color:#3d8b40; }
+
+    .login-link{ text-align:center; margin-top:1.5rem; color:#6c757d; }
+    .login-link a{ color:#4CAF50; text-decoration:none; font-weight:500; cursor:pointer; }
+    .login-link a:hover{ text-decoration:underline; }
+
+    .form-toggle{ display:flex; justify-content:center; margin-bottom:1.5rem; border-bottom:1px solid #e9ecef; }
+    .toggle-btn{ background:none; border:none; padding:.8rem 1.5rem; font-weight:500; color:#6c757d; position:relative; cursor:pointer; }
+    .toggle-btn.active{ color:#4CAF50; }
+    .toggle-btn.active::after{ content:''; position:absolute; bottom:-1px; left:0; width:100%; height:3px; background:#4CAF50; border-radius:3px 3px 0 0; }
+
+    .form-section{ display:none; }
+    .form-section.active{ display:block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="registration-container"><!-- fixed class -->
+      <div class="row g-0">
+        <div class="col-md-5 registration-left"><!-- fixed class -->
+          <h2>Join India's Largest Farmer Network</h2>
+          <p>Connect with thousands of farmers, access market prices, get AI-based crop recommendations, and grow your business with KrishiNet.</p>
+          <ul class="feature-list">
+            <li><i class="fas fa-check"></i> Sell your crops directly to buyers</li>
+            <li><i class="fas fa-check"></i> Get real-time market prices</li>
+            <li><i class="fas fa-check"></i> AI-powered crop recommendations</li>
+            <li><i class="fas fa-check"></i> Rent farm equipment easily</li>
+            <li><i class="fas fa-check"></i> Connect with farming community</li>
+          </ul>
+          <div class="mt-5 d-flex">
+            <i class="fas fa-users fa-2x me-3"></i>
+            <div>
+              <h4>50,000+ Farmers</h4>
+              <p>Already connected through KrishiNet</p>
+            </div>
+          </div>
+        </div>
+
+       <!-- Fixed toast container for flash messages -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for cat, msg in messages %}
+      <div class="toast align-items-center text-bg-{{ 'success' if cat=='success' else 'warning' if cat=='warning' else 'danger' if cat=='danger' else 'primary' }} border-0 show"
+           role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+        <div class="d-flex">
+          <div class="toast-body">{{ msg }}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                  data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
+  {% endwith %}
+</div>
+
+
+
+        <div class="col-md-7 registration-right">
+          <div class="registration-logo"><i class="fas fa-leaf me-2"></i>KrishiNet</div>
+
+          <div class="form-toggle">
+            <button class="toggle-btn active" id="registerToggle" type="button">Register</button>
+            <button class="toggle-btn" id="loginToggle" type="button">Login</button>
+          </div>
+
+          <!-- Registration Form -->
+          <div class="form-section active" id="registrationForm">
+            <h3 class="form-title">Create Your Farmer Account</h3>
+
+            <div class="step-progress-container mb-5">
+              <div class="step-progress">
+                <div class="step active">1</div>
+                <div class="step">2</div>
+                <div class="step">3</div>
+              </div>
+            </div>
+
+          <form id="registerForm" action="/registration" method="POST" novalidate>
+  <!-- Hidden combined name that backend expects -->
+  <input type="hidden" name="name" id="fullNameHidden"/>
+
+  <div class="row">
+    <div class="col-md-6">
+      <div class="form-group">
+        <label for="firstName">First Name <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="firstName" placeholder="Enter your first name" required>
+        <div class="invalid-feedback">First name is required.</div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="form-group">
+        <label for="lastName">Last Name <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="lastName" placeholder="Enter your last name" required>
+        <div class="invalid-feedback">Last name is required.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label for="email">Email Address <span class="text-danger">*</span></label>
+    <input type="email" class="form-control" id="email" name="email" placeholder="Enter your email address" required>
+    <div class="invalid-feedback">Enter a valid email.</div>
+  </div>
+
+  <div class="form-group">
+    <label for="phone">Phone Number <span class="text-danger">*</span></label>
+    <div class="input-group">
+      <span class="input-group-text">+91</span>
+      <input type="tel" class="form-control" id="phone" name="phone" placeholder="Enter your 10-digit phone number"
+             pattern="^[0-9]{10}$" required>
+      <div class="invalid-feedback">Phone must be exactly 10 digits.</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <div class="form-group">
+        <label for="password">Password <span class="text-danger">*</span></label>
+        <div class="input-group">
+        <input type="password" class="form-control" id="password" name="password"
+       placeholder="Create a password" minlength="8" required
+       pattern="(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}">
+<button class="btn btn-outline-secondary" type="button" id="togglePwd" aria-label="Show/Hide password">
+  <i class="fa-regular fa-eye" id="pwdEye"></i>
+</button>
+          <div class="invalid-feedback">
+            Min 8 chars, include one uppercase, one number, and one special character.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="form-group">
+        <label for="confirmPassword">Confirm Password <span class="text-danger">*</span></label>
+        <div class="input-group">
+          <input type="password" class="form-control" id="confirmPassword" name="confirm"
+                 placeholder="Confirm your password" minlength="8" required>
+          <button class="btn btn-outline-secondary" type="button" id="toggleConfirm">
+            <i class="fa-regular fa-eye" id="confirmEye"></i>
+          </button>
+          <div class="invalid-feedback">Passwords must match.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label for="state">State <span class="text-danger">*</span></label>
+    <select class="form-control" id="state" name="state" required>
+      <option value="">Select your state</option>
+      <!-- 28 states + 2 UTs (to make 30 options as requested) -->
+      <option>Andhra Pradesh</option>
+      <option>Arunachal Pradesh</option>
+      <option>Assam</option>
+      <option>Bihar</option>
+      <option>Chhattisgarh</option>
+      <option>Goa</option>
+      <option>Gujarat</option>
+      <option>Haryana</option>
+      <option>Himachal Pradesh</option>
+      <option>Jharkhand</option>
+      <option>Karnataka</option> <!-- kept selected for easier testing -->
+      <option>Kerala</option>
+      <option>Madhya Pradesh</option>
+      <option>Maharashtra</option>
+      <option>Manipur</option>
+      <option>Meghalaya</option>
+      <option>Mizoram</option>
+      <option>Nagaland</option>
+      <option>Odisha</option>
+      <option>Punjab</option>
+      <option>Rajasthan</option>
+      <option>Sikkim</option>
+      <option>Tamil Nadu</option>
+      <option>Telangana</option>
+      <option>Tripura</option>
+      <option>Uttar Pradesh</option>
+      <option>Uttarakhand</option>
+      <option>West Bengal</option>
+      <!-- add 2 UTs to total 30 -->
+      <option>Delhi (NCT)</option>
+      <option>Jammu & Kashmir</option>
+    </select>
+    <div class="invalid-feedback">Please select your state.</div>
+  </div>
+
+  <!-- District: free-text for most states, but a select for Karnataka -->
+  <div class="form-group">
+    <label for="districtText">District <span class="text-danger">*</span></label>
+
+    <!-- Free-text district for non-Karnataka -->
+    <input type="text" class="form-control" id="districtText" name="district_text"
+           placeholder="Enter your district" required>
+
+    <!-- Karnataka-specific district select (hidden by default) -->
+    <select class="form-control" id="karnatakaDistrict" name="district" style="display:none;">
+      <option value="">Select district (Karnataka)</option>
+      <option>Bengaluru Urban</option>
+      <option>Bengaluru Rural</option>
+      <option>Mysuru</option>
+      <option>Dakshina Kannada (Mangalore)</option>
+      <option>Hubli-Dharwad</option>
+      <option>Belagavi</option>
+      <option>Ballari</option>
+      <option>Tumakuru</option>
+      <option>Hassan</option>
+      <option>Shivamogga</option>
+      <option>Kolar</option>
+      <option>Chikkaballapur</option>
+      <option>Vijayapura</option>
+      <option>Raichur</option>
+      <option>Kalaburagi</option>
+      <option>Chitradurga</option>
+      
+    </select>
+
+    <div class="invalid-feedback">District is required.</div>
+    <small class="form-text text-muted">If you select "Karnataka" above you'll see a district dropdown.</small>
+  </div>
+
+  <!-- Replaced Village/Taluka with City + Pin Code -->
+  <div class="form-group">
+    <label for="city">City <span class="text-danger">*</span></label>
+    <input type="text" class="form-control" id="city" name="city" placeholder="Enter your city" required>
+    <div class="invalid-feedback">City is required.</div>
+  </div>
+
+  <div class="form-group">
+    <label for="pincode">Pin Code <span class="text-danger">*</span></label>
+    <input type="text" class="form-control" id="pincode" name="pincode" placeholder="6-digit pin code"
+           pattern="^\d{6}$" required>
+    <div class="invalid-feedback">Enter a valid 6-digit pin code.</div>
+  </div>
+
+  <div class="form-group">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="terms" name="terms" required>
+      <label class="form-check-label" for="terms">
+        I agree to the <a href="#">Terms & Conditions</a> and <a href="#">Privacy Policy</a> <span class="text-danger">*</span>
+      </label>
+      <div class="invalid-feedback">You must accept the Terms & Privacy.</div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="updates" name="updates" required>
+      <label class="form-check-label" for="updates">
+        I want to receive updates about market prices and farming tips <span class="text-danger">*</span>
+      </label>
+      <div class="invalid-feedback">This selection is required.</div>
+    </div>
+  </div>
+
+  <div class="form-group mt-4">
+    <button type="submit" class="btn btn-primary" id="submitBtn">Create Account</button>
+  </div>
+
+  <div class="login-link">
+  Already have an account? <a href="{{ url_for('login') }}">Login here</a>
+</div>
+
+</form>
+
+    <!-- OTP & Forgot panels (kept for later; not posting to server yet) -->
+    <div class="form-section" id="otpPanel" style="display:none"> ... </div>
+    <div class="form-section" id="forgotPanel" style="display:none"> ... </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+  // ------------------------------
+  // Helpers
+  // ------------------------------
+  const $ = (id) => document.getElementById(id);
+  const showSection = (id) => {
+    ['registrationForm','loginForm','forgotPanel','otpPanel'].forEach(x=>{
+      const el = $(x); if (el) el && el.classList.remove('active');
+    });
+    $(id)?.classList.add('active');
+  };
+
+  // ------------------------------
+  // Tabs: Register / Login
+  // ------------------------------
+  $('registerToggle')?.addEventListener('click', () => {
+    $('registerToggle')?.classList.add('active');
+    $('loginToggle')?.classList.remove('active');
+    showSection('registrationForm');
+  });
+  $('loginToggle')?.addEventListener('click', () => {
+    $('loginToggle')?.classList.add('active');
+    $('registerToggle')?.classList.remove('active');
+    showSection('loginForm');
+  });
+
+  // ------------------------------
+  // Password eye toggles
+  // ------------------------------
+  function toggleVisibility(inputId, iconId) {
+    const input = document.getElementById(inputId);
+    const icon  = document.getElementById(iconId);
+    if (!input || !icon) return;
+    if (input.type === "password") {
+      input.type = "text";
+      icon.classList.remove("fa-eye");
+      icon.classList.add("fa-eye-slash");
+    } else {
+      input.type = "password";
+      icon.classList.remove("fa-eye-slash");
+      icon.classList.add("fa-eye");
+    }
+  }
+
+  document.getElementById("togglePwd")?.addEventListener("click", () =>
+    toggleVisibility("password", "pwdEye")
+  );
+
+  document.getElementById("toggleConfirm")?.addEventListener("click", () =>
+    toggleVisibility("confirmPassword", "confirmEye")
+  );
+
+  // ------------------------------
+  // Karnataka district toggle logic
+  // ------------------------------
+  const stateEl = $('state');
+  const kDistSelect = $('karnatakaDistrict');
+  const distText = $('districtText');
+
+  const toggleDistrictFields = () => {
+    const isKarnataka = (stateEl?.value || '').trim().toLowerCase() === 'karnataka';
+    if (isKarnataka) {
+      // show select, hide text input
+      kDistSelect.style.display = '';
+      kDistSelect.required = true;
+      distText.style.display = 'none';
+      distText.required = false;
+      distText.value = '';
+    } else {
+      // show text input, hide select
+      kDistSelect.style.display = 'none';
+      kDistSelect.required = false;
+      kDistSelect.value = '';
+      distText.style.display = '';
+      distText.required = true;
+    }
+  };
+
+  stateEl?.addEventListener('change', toggleDistrictFields);
+  // run initially (useful because Karnataka is pre-selected in this template)
+  toggleDistrictFields();
+
+  // ------------------------------
+  // Registration: validation + submit
+  // ------------------------------
+  const regForm   = $('registerForm');
+  const submitBtn = $('submitBtn');
+
+  // Live validation helpers
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const passRe  = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
+  const pinRe   = /^\d{6}$/;
+
+  const setValidity = (input, ok, msg='') => {
+    if (!input) return;
+    input.setCustomValidity(ok ? '' : msg);
+  };
+
+  // Keep confirm password consistent
+  const syncConfirmValidity = () => {
+    const p1 = $('password')?.value || '';
+    const p2 = $('confirmPassword')?.value || '';
+    setValidity($('confirmPassword'), p1 === p2, 'Passwords must match.');
+  };
+
+  $('email')?.addEventListener('input',  e => setValidity(e.target, emailRe.test(e.target.value), 'Enter a valid email.'));
+  $('phone')?.addEventListener('input',  e => setValidity(e.target, /^\d{10}$/.test(e.target.value), 'Phone must be exactly 10 digits.'));
+  $('password')?.addEventListener('input', e => setValidity(e.target, passRe.test(e.target.value), 'Min 8 chars, include one uppercase, one number, and one special character.'));
+  $('confirmPassword')?.addEventListener('input', syncConfirmValidity);
+  $('password')?.addEventListener('input', syncConfirmValidity);
+  $('pincode')?.addEventListener('input', e => setValidity(e.target, pinRe.test(e.target.value), 'Enter a valid 6-digit pin code.'));
+
+  regForm?.addEventListener('submit', function (event) {
+    // Combine first/last into hidden "name" for backend
+    const full = (`${$('firstName')?.value || ''} ${$('lastName')?.value || ''}`).trim();
+    $('fullNameHidden').value = full;
+
+    // Re-run custom checks to ensure messages are set
+    if ($('email'))  setValidity($('email'),  emailRe.test($('email').value), 'Enter a valid email.');
+    if ($('phone'))  setValidity($('phone'),  /^\d{10}$/.test($('phone').value), 'Phone must be exactly 10 digits.');
+    if ($('password')) setValidity($('password'), passRe.test($('password').value), 'Min 8 chars, include one uppercase, one number, and one special character.');
+    if ($('pincode')) setValidity($('pincode'), pinRe.test($('pincode').value), 'Enter a valid 6-digit pin code.');
+    syncConfirmValidity();
+
+    // If Karnataka is selected ensure select is pushed to submitted name "district"
+    if ((stateEl?.value || '').trim().toLowerCase() === 'karnataka') {
+      // ensure the select has name="district" (already set). If using server expecting "district", good.
+      // If you want districtText to be used instead for non-KA, we will map on server - OR:
+      // copy selected value into a hidden district field so server always sees "district"
+      let hidden = document.getElementById('districtHidden');
+      if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'district';
+        hidden.id = 'districtHidden';
+        regForm.appendChild(hidden);
+      }
+      hidden.value = kDistSelect.value || '';
+    } else {
+      // for non-KA, copy districtText to hidden district
+      let hidden = document.getElementById('districtHidden');
+      if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'district';
+        hidden.id = 'districtHidden';
+        regForm.appendChild(hidden);
+      }
+      hidden.value = distText.value || '';
+    }
+
+    // HTML5 constraint validation gate
+    if (!regForm.checkValidity()) {
+      event.preventDefault();
+      event.stopPropagation();
+      regForm.classList.add('was-validated');   // show Bootstrap invalid-feedback
+      return;
+    }
+
+    // Prevent double-submits
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Creating account…';
+    }
+  });
+
+  // ------------------------------
+  // (Optional) Login client checks
+  // ------------------------------
+  // You can add similar validation for #loginFormElement if needed.
+</script>
+
+</body>
+</html>

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}My Orders{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h3 class="mb-3">Purchase History</h3>
+
+  {% if not orders %}
+    <div class="alert alert-info">No purchases yet.</div>
+  {% else %}
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead class="table-success">
+          <tr>
+            <th>Order ID</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Seller</th>
+            <th>Status</th>
+            <th>Txn</th>
+            <th>Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in orders %}
+            {% set o = row['order'] %}
+            <tr>
+              <td>#{{ o.id }}</td>
+
+              <td style="min-width:280px; max-width:420px; white-space:normal;">
+                {% if row['items'] and row['items']|length > 0 %}
+                  <ul class="mb-0 small">
+                    {% for it in row['items'] %}
+                      <li>
+                        <strong>{{ it.title or ("Product #" ~ it.product_id) }}</strong> —
+                        {% set q = it.quantity if it.quantity is not none else 0 %}
+                        {{ "{:.2f}".format(q) }}{% if it.qty_unit %} {{ it.qty_unit }}{% endif %}
+                        {% if it.unit_price is not none %} • ₹{{ "{:,.2f}".format(it.unit_price) }}{% endif %}
+                        {% if it.subtotal is not none %} <span class="text-muted"> (₹{{ "{:,.2f}".format(it.subtotal) }})</span>{% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <span class="text-muted">No items recorded</span>
+                {% endif %}
+              </td>
+
+              <td><strong>₹{{ "{:,.2f}".format(o.total_amount if o.total_amount is not none else 0) }}</strong></td>
+
+              <td>{{ o.seller_name or '—' }}</td>
+
+              <td>
+                {% set st = (o.status or "")|lower %}
+                {% if st == "paid" %}
+                  <span class="badge bg-success">Paid</span>
+                {% elif st in ["created","pending","processing"] %}
+                  <span class="badge bg-warning text-dark">Pending</span>
+                {% elif st in ["canceled","cancelled"] %}
+                  <span class="badge bg-secondary">Cancelled</span>
+                {% else %}
+                  <span class="badge bg-light text-dark">{{ o.status }}</span>
+                {% endif %}
+              </td>
+
+              <td style="max-width:160px;">
+                {% set tid = row['txn_id'] %}
+                {% if tid %}
+                  <span title="{{ tid }}">{{ tid[:12] }}{% if tid|length > 12 %}…{% endif %}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              <td>{{ o.created_at }}</td>
+
+              <td>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('marketplace.order_detail', order_id=o.id) }}">View</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

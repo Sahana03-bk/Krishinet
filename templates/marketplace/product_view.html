@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ product.title }} — Marketplace{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="row">
+    <!-- Left: Images -->
+    <div class="col-md-7">
+      <div class="card mb-3">
+        {% if hero_image %}
+          <img src="{{ url_for('static', filename='uploads/' ~ hero_image) }}" class="card-img-top" style="height:360px; object-fit:cover;">
+        {% else %}
+          <img src="{{ url_for('static', filename='img/placeholder-hero.png') }}" class="card-img-top" style="height:360px; object-fit:cover;">
+        {% endif %}
+        <div class="card-body py-2">
+          <div class="d-flex gap-2 flex-wrap">
+            {% for m in medias %}
+              {% if m.filename %}
+                <img src="{{ url_for('static', filename='uploads/' ~ m.filename) }}" style="height:64px; width:96px; object-fit:cover; border-radius:6px; border:1px solid #eee; cursor:pointer;"
+                     onclick="document.querySelector('#heroImg').src=this.src;">
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <h3 class="mb-2">{{ product.title }}</h3>
+      <p class="text-muted mb-2">{{ product.category or '—' }}</p>
+      <div class="mb-3">
+        <strong>Price:</strong> ₹{{ '%.2f'|format(product.price or 0) }} &nbsp; • &nbsp;
+        <strong>Quantity available:</strong> {{ product.quantity or 0 }} {{ product.quantity_unit or '' }}
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <h5>Description</h5>
+          <p class="text-muted" style="white-space:pre-line;">{{ product.description or 'No description' }}</p>
+        </div>
+      </div>
+
+      {% if delivery_list %}
+      <div class="card mb-3">
+        <div class="card-body">
+          <h6>Delivery locations</h6>
+          <ul class="mb-0">
+            {% for d in delivery_list %}
+              <li>{{ d }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Right: Buy / Seller -->
+    <div class="col-md-5">
+      <div class="card mb-3">
+        <div class="card-body">
+          <form method="post" action="{{ url_for('marketplace.buy_product', pid=product.id) }}">
+            <div class="mb-3">
+              <label class="form-label">Quantity</label>
+              <input name="quantity" type="number" min="1" step="1" value="1" class="form-control" style="max-width:140px;">
+            </div>
+
+            <button type="submit" class="btn btn-success w-100 mb-2">
+              Buy — ₹{{ '%.2f'|format(product.price or 0) }}
+            </button>
+          </form>
+
+          <!-- Seller / meta -->
+          <div class="mt-3 small text-muted">
+            <div>Seller: <a href="{{ url_for('view_farmer', uid=product.seller_id) }}">{{ product.seller_name }}</a></div>
+            <div class="mt-2">Posted: {{ product.created_at }}</div>
+          </div>
+
+          <!-- Edit / Delete for owner only -->
+          {% if user and user.id == product.seller_id %}
+            <div class="mt-3 d-flex gap-2">
+              <a href="{{ url_for('marketplace.product_edit', pid=product.id) }}" class="btn btn-warning">Edit</a>
+
+              <form method="post" action="{{ url_for('marketplace.product_delete', pid=product.id) }}" onsubmit="return confirm('Delete product?');" style="display:inline;">
+                <button type="submit" class="btn btn-danger">Delete</button>
+              </form>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Small seller card -->
+      <div class="card">
+        <div class="card-body">
+          <h6>Seller info</h6>
+          <div class="d-flex align-items-center gap-3">
+            {% if product.profile_photo %}
+              <img src="{{ url_for('static', filename='uploads/' ~ product.profile_photo) }}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;">
+            {% else %}
+              <div style="width:56px;height:56px;border-radius:6px;background:#f1f1f1;display:flex;align-items:center;justify-content:center;">{{ (product.seller_name[0] if product.seller_name) | upper }}</div>
+            {% endif %}
+            <div>
+              <div><a href="{{ url_for('view_farmer', uid=product.seller_id) }}">{{ product.seller_name }}</a></div>
+              <div class="small text-muted">Seller ID: {{ product.seller_id }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // make hero clickable images swap hero - fallback if using the top image element by id
+  (function(){
+    const top = document.querySelector('.card-img-top');
+    if(top) top.id = 'heroImg';
+  })();
+</script>
+{% endblock %}

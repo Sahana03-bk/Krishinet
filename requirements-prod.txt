@@ -1,0 +1,8 @@
+flask
+python-dotenv
+stripe
+gunicorn
+mysql-connector-python
+requests
+beautifulsoup4
+lxml

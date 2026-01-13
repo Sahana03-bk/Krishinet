@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KrishiNet - Farmer Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap">
+  <style>
+    :root {
+      --primary-green: #4CAF50;
+      --dark-green: #2E7D32;
+      --light-green: #E8F5E9;
+      --text-dark: #333;
+      --text-muted: #6c757d;
+    }
+    body {
+      font-family: 'Poppins', sans-serif;
+      background-color: #f8f9fa;
+      background-image: url('https://images.unsplash.com/photo-1500937386664-56d1dfef3854?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .navbar {
+      background: linear-gradient(to right, var(--dark-green), var(--primary-green));
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      padding: 0.5rem 1rem;
+    }
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: white !important;
+    }
+    .navbar-brand i { margin-right: 10px; font-size: 1.8rem; }
+    .nav-link { color: rgba(255, 255, 255, 0.9) !important; font-weight: 500; margin: 0 5px; transition: all 0.3s; }
+    .nav-link:hover { color: white !important; transform: translateY(-2px); }
+
+    .login-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 0; }
+    .login-card { background: white; border-radius: 12px; box-shadow: 0 5px 30px rgba(0, 0, 0, 0.15); overflow: hidden; max-width: 520px; width: 100%; }
+    .login-header { background: linear-gradient(to right, var(--dark-green), var(--primary-green)); color: white; padding: 1.5rem; text-align: center; }
+    .login-header h3 { margin: 0; font-weight: 600; }
+    .login-body { padding: 1.5rem; }
+    .form-control { padding: 0.75rem; border-radius: 5px; border: 1px solid #ced4da; margin-bottom: 1rem; }
+    .form-control:focus { border-color: var(--primary-green); box-shadow: 0 0 0 0.2rem rgba(76, 175, 80, 0.25); }
+    .btn-success { background-color: var(--primary-green); border-color: var(--primary-green); padding: 0.75rem; font-weight: 600; }
+    .btn-success:hover { background-color: var(--dark-green); border-color: var(--dark-green); }
+    .btn-primary { background-color: #1565c0; border-color: #1565c0; }
+    .login-options { display: flex; justify-content: space-between; margin-top: 1rem; font-size: 0.9rem; }
+    .login-options a { color: var(--primary-green); text-decoration: none; cursor: pointer; }
+    .login-options a:hover { text-decoration: underline; }
+    .signup-note { text-align: center; margin-top: 1rem; font-size: .95rem; }
+    .signup-note a { color: #1565c0; text-decoration: none; }
+    .signup-note a:hover { text-decoration: underline; }
+    .hidden { display: none; }
+
+    .footer { background: linear-gradient(to right, var(--dark-green), var(--primary-green)); color: white; padding: 1rem 0; text-align: center; margin-top: auto; }
+
+    .toggle-eye{
+      position:absolute; right:15px; top:50%;
+      transform:translateY(-50%); cursor:pointer; color:#888;
+    }
+
+    /* alert spacing inside card */
+    .login-alert { margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+<!-- Navigation Bar (clean, only logo/brand) -->
+<nav class="navbar navbar-dark" style="background: linear-gradient(to right, #2E7D32, #4CAF50);">
+  <div class="container">
+    <a class="navbar-brand" href="{{ url_for('index') }}">
+      <i class="fas fa-leaf"></i> KrishiNet
+    </a>
+  </div>
+</nav>
+
+  <!-- Login Container -->
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-header">
+        <h3>Farmer Login</h3>
+      </div>
+
+      <div class="login-body">
+        <!-- Inline error for failed login (passed as login_error) -->
+        {% if login_error %}
+          <div class="alert alert-danger alert-dismissible fade show login-alert" role="alert">
+            {{ login_error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endif %}
+
+        <!-- Flashed messages (kept, but usually used for redirects / success) -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for cat, msg in messages %}
+              <div class="alert alert-{{ 'success' if cat=='success' else 'warning' if cat=='warning' else 'danger' if cat=='danger' else 'info' }} alert-dismissible fade show login-alert" role="alert">
+                {{ msg }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- Login Panel (only email/password) -->
+        <div id="panel-login">
+          <form method="POST" action="{{ url_for('login') }}">
+            <div class="mb-3">
+              <input id="loginEmail" name="email" type="email" class="form-control"
+                     placeholder="Email Address" required value="{{ email|default('') }}">
+            </div>
+
+            <div class="mb-3 position-relative">
+              <input id="loginPass" name="password" type="password" class="form-control"
+                     placeholder="Password" required>
+              <i class="fa fa-eye toggle-eye" data-target="#loginPass"></i>
+            </div>
+
+            <button type="submit" class="btn btn-success w-100 mb-3">Login</button>
+          </form>
+
+          <div class="signup-note">
+            Don’t have an account? <a href="{{ url_for('registration') }}">Register</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p class="mb-0">© 2023 KrishiNet. Empowering Farmers, Enriching Agriculture.</p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+  // Works for all eye icons that have data-target pointing to the input
+  document.querySelectorAll('.toggle-eye').forEach(icon=>{
+    icon.addEventListener('click', ()=>{
+      const field = document.querySelector(icon.dataset.target);
+      const isPw = field.getAttribute('type') === 'password';
+      field.setAttribute('type', isPw ? 'text' : 'password');
+      icon.classList.toggle('fa-eye');
+      icon.classList.toggle('fa-eye-slash');
+    });
+  });
+  </script>
+</body>
+</html>

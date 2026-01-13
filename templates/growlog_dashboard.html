@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}My GrowLogs — KrishiNet{% endblock %}
+
+{% block content %}
+<div class="container-dashboard">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>My GrowLogs</h3>
+    <a href="{{ url_for('videos_public') }}" class="btn btn-outline-secondary">Public Gallery</a>
+  </div>
+
+  <!-- Upload form -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <form action="{{ url_for('growlog_upload') }}" method="post" enctype="multipart/form-data">
+        <div class="row g-2">
+          <div class="col-md-5">
+            <label class="form-label">Video file</label>
+            <input type="file" name="video" accept="video/*" class="form-control" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Title</label>
+            <input name="title" class="form-control" maxlength="140">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Type</label>
+            <input name="vid_type" class="form-control" placeholder="e.g., demo, harvest, tips">
+          </div>
+          <div class="col-md-1 d-flex align-items-end">
+            <button class="btn btn-success w-100" type="submit">Upload</button>
+          </div>
+        </div>
+        <div class="mt-2">
+          <label class="form-label small">Description</label>
+          <textarea name="description" class="form-control" rows="2"></textarea>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- List of own videos -->
+  <div class="row g-3">
+    {% for v in videos %}
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">{{ v.title or 'Untitled' }}</h5>
+            <div class="mb-2">
+              <video controls width="100%" preload="metadata" poster="">
+                <source src="{{ url_for('static', filename='uploads/' ~ v.filename) }}" type="video/mp4">
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            <p class="small text-muted">{{ v.vid_type or '' }} • Uploaded: {{ v.created_at }}</p>
+            <p>{{ v.description }}</p>
+            <div class="d-flex gap-2">
+              <form action="{{ url_for('growlog_delete', vid_id=v.id) }}" method="post" onsubmit="return confirm('Delete this video?');">
+                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="fas fa-trash-alt"></i> Delete</button>
+              </form>
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('videos_public') }}#v{{ v.id }}">View on public gallery</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="col-12">
+        <div class="alert alert-info">No videos yet. Upload one above to share your experience.</div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

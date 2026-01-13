@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Listing' if rental else 'Post Equipment' }} — KrishiNet{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="fa-solid fa-house"></i> Back to Dashboard
+  </a>
+</div>
+
+<!-- FLASH MESSAGES -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="container my-2">
+      {% for category, msg in messages %}
+        <div class="alert alert-{{ 'danger' if category=='danger' else category }} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<div class="container my-4 page-with-form">
+  <h3>{{ 'Edit Listing' if rental else 'Post Equipment' }}</h3>
+
+  <!-- main form -->
+  <form id="rental-form" method="post" enctype="multipart/form-data">
+    <!-- Title -->
+    <div class="mb-3">
+      <label>Title</label>
+      <input name="title" class="form-control" required value="{{ rental.title if rental else '' }}">
+    </div>
+
+    <!-- Category -->
+    <div class="mb-3">
+      <label>Category</label>
+      <select name="category" class="form-select">
+        <option value="">Select</option>
+        {% for c in categories %}
+          <option value="{{ c }}" {% if rental and rental.category==c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Price -->
+    <div class="mb-3">
+      <label>Price per day (₹)</label>
+      <input name="price_per_day" class="form-control" required value="{{ rental.price_per_day if rental else '' }}">
+    </div>
+
+    <!-- Deposit -->
+    <div class="mb-3">
+      <label>Deposit (optional)</label>
+      <input name="deposit" class="form-control" value="{{ rental.deposit if rental else '' }}">
+    </div>
+
+    <!-- Condition -->
+    <div class="mb-3">
+      <label>Condition</label>
+      <select name="condition" class="form-select">
+        <option {% if not rental or rental.condition=='New' %}selected{% endif %}>New</option>
+        <option {% if rental and rental.condition=='Good' %}selected{% endif %}>Good</option>
+        <option {% if rental and rental.condition=='Used' %}selected{% endif %}>Used</option>
+        <option {% if rental and rental.condition=='Needs Repair' %}selected{% endif %}>Needs Repair</option>
+      </select>
+    </div>
+
+    <!-- Location -->
+    <div class="mb-3">
+      <label>Location (village / taluk)</label>
+      <input name="location" class="form-control" value="{{ rental.location if rental else '' }}" placeholder="Eg: Pune, Nashik">
+      <small class="text-muted">Write comma separated location names (will be saved as provided).</small>
+    </div>
+
+    <!-- Description -->
+    <div class="mb-3">
+      <label>Equipment Description</label>
+      <textarea name="description" class="form-control" rows="4" placeholder="Describe the equipment, condition, usage, attachments, any instructions...">{{ rental.description if rental else '' }}</textarea>
+    </div>
+
+    <!-- Existing images (edit mode) -->
+    {% if rental and medias %}
+      <div class="mb-3">
+        <label class="form-label">Existing Images</label>
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+          {% for img in medias %}
+            <div class="position-relative" style="width:120px">
+              <img src="{{ url_for('static', filename='uploads/' ~ img.filename) }}"
+                   class="img-thumbnail" style="width:100%; height:90px; object-fit:cover;">
+              <div style="position:absolute; top:6px; right:6px; display:flex; gap:6px;">
+                <!-- form fallback (non-JS) -->
+                <form method="post" action="{{ url_for('rental.delete_media', img_id=img.id) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-danger btn-delete-media" data-id="{{ img.id }}" title="Delete image" onclick="return confirm('Remove this image?')">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </form>
+
+                <form method="post" action="{{ url_for('rental.set_hero_image', img_id=img.id) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-outline-secondary btn-set-hero" data-id="{{ img.id }}" title="Set hero image">
+                    <i class="fa-solid fa-star"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+        <small class="text-muted d-block mt-2">Uploading new images will add to this gallery (existing images remain until deleted).</small>
+      </div>
+    {% endif %}
+
+    <!-- Photos upload -->
+    <div class="mb-3">
+      <label>Images / Videos</label>
+      <input id="media-input" name="media[]" type="file" multiple class="form-control" accept="image/*,video/mp4,video/quicktime">
+      {% if rental %}
+        <div class="mt-2 small text-muted">You can upload multiple images or short videos (jpg, png, mp4). Uploading adds to the current gallery.</div>
+      {% else %}
+        <div class="mt-2 small text-muted">You can upload multiple images or short videos (jpg, png, mp4).</div>
+      {% endif %}
+      <div id="preview" class="d-flex flex-wrap gap-2 mt-3"></div>
+    </div>
+
+    <!-- hidden desktop fallback buttons -->
+    <div class="d-none d-md-block mt-2">
+      <button type="submit" class="btn btn-success">{{ 'Update' if rental else 'Post Equipment' }}</button>
+      {% if rental %}
+        <a class="btn btn-outline-secondary ms-2" href="{{ url_for('rental.view_rental', rid=rental.id) }}">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- STICKY ACTION BAR -->
+<style>
+.page-with-form { padding-bottom: 120px; }
+.sticky-action-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 2050;
+  background: rgba(255,255,255,0.98); border-top: 1px solid rgba(0,0,0,0.06);
+  padding: 10px 18px; display: flex; justify-content: center;
+  box-shadow: 0 -6px 24px rgba(3,10,25,0.04);
+}
+.sticky-action-inner { width: 100%; max-width: 980px; display:flex; gap:12px; align-items:center; justify-content:space-between; padding:0 6px; }
+.sticky-action-primary { background-color:#198754; color:#fff; border:none; padding:12px 28px; font-size:16px; border-radius:10px; box-shadow:0 8px 20px rgba(3,10,25,0.12); cursor:pointer; display:inline-flex; align-items:center; gap:.6rem; }
+.sticky-action-secondary { background:transparent; color:#495057; border:1px solid #ced4da; padding:10px 18px; font-size:15px; border-radius:10px; cursor:pointer; }
+@media (max-width:520px) { .sticky-action-inner { gap:8px; } .sticky-action-primary { flex:1 1 auto; justify-content:center; padding:12px 18px; } .sticky-action-secondary { display:none; } }
+</style>
+
+<div class="sticky-action-bar" role="toolbar" aria-hidden="false">
+  <div class="sticky-action-inner">
+    <button type="submit"
+            form="rental-form"
+            class="sticky-action-primary"
+            id="sticky-submit-btn"
+            aria-label="{{ 'Update' if rental else 'Post Equipment' }}">
+      <i class="fa-solid fa-paper-plane"></i>
+      <span>{{ 'Update' if rental else 'Post Equipment' }}</span>
+    </button>
+
+    {% if rental %}
+      <a href="{{ url_for('rental.view_rental', rid=rental.id) }}" class="sticky-action-secondary" role="button">Cancel</a>
+    {% else %}
+      <button type="button" class="sticky-action-secondary" id="sticky-preview-btn">Preview</button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- JS: preview thumbnails + disable submit while submitting + preview button -->
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // image/video preview
+  const input = document.getElementById('media-input');
+  const preview = document.getElementById('preview');
+
+  if (input) {
+    input.addEventListener('change', function () {
+      preview.innerHTML = '';
+      const files = Array.from(this.files).slice(0, 12); // limit thumbnails
+      files.forEach(file => {
+        const wrapper = document.createElement('div');
+        wrapper.style.width = '96px';
+        wrapper.style.height = '96px';
+        wrapper.style.border = '1px solid #e9ecef';
+        wrapper.style.borderRadius = '6px';
+        wrapper.style.overflow = 'hidden';
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'center';
+        wrapper.style.background = '#fff';
+
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          const img = document.createElement('img');
+          img.style.maxWidth = '100%';
+          img.style.maxHeight = '100%';
+          img.alt = file.name;
+          reader.onload = function (e) {
+            img.src = e.target.result;
+            wrapper.appendChild(img);
+            preview.appendChild(wrapper);
+          };
+          reader.readAsDataURL(file);
+        } else if (file.type.startsWith('video/')) {
+          const el = document.createElement('div');
+          el.style.fontSize = '12px';
+          el.style.textAlign = 'center';
+          el.innerHTML = '<i class="fa-solid fa-video" style="font-size:20px;"></i><div style="font-size:11px;padding:4px;">' + file.name.split('.').slice(0,1) + '</div>';
+          wrapper.appendChild(el);
+          preview.appendChild(wrapper);
+        }
+      });
+    });
+  }
+
+  // disable sticky submit while submitting
+  const submitBtn = document.getElementById('sticky-submit-btn');
+  const form = document.getElementById('rental-form');
+  if (form && submitBtn) {
+    form.addEventListener('submit', function () {
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.7';
+      if (!submitBtn.querySelector('.spinner-border')) {
+        const spinner = document.createElement('span');
+        spinner.className = 'spinner-border spinner-border-sm ms-2';
+        spinner.setAttribute('role', 'status');
+        spinner.setAttribute('aria-hidden', 'true');
+        submitBtn.appendChild(spinner);
+      }
+    });
+  }
+
+  // optional preview button behaviour
+  const previewBtn = document.getElementById('sticky-preview-btn');
+  if (previewBtn) {
+    previewBtn.addEventListener('click', function () {
+      const pv = document.getElementById('preview');
+      if (pv && pv.children.length) {
+        pv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        alert('No files selected to preview.');
+      }
+    });
+  }
+});
+</script>
+
+<script>
+document.addEventListener('click', async (e)=>{
+  const delBtn = e.target.closest('.btn-delete-media');
+  const heroBtn = e.target.closest('.btn-set-hero');
+  if (delBtn){
+    e.preventDefault();
+    if (!confirm('Delete this image?')) return;
+    const id = delBtn.dataset.id;
+    try {
+      const res = await fetch(`/rental/media/${id}/delete`, {method:'POST', credentials:'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}});
+      const j = await res.json();
+      if (j.ok) {
+        // remove the thumbnail container
+        const container = delBtn.closest('.position-relative');
+        if (container) container.remove();
+      } else {
+        alert('Delete failed: '+(j.error||'unknown'));
+      }
+    } catch (err) {
+      alert('Network error: ' + err);
+    }
+  }
+  if (heroBtn){
+    e.preventDefault();
+    const id = heroBtn.dataset.id;
+    try {
+      const res = await fetch(`/rental/media/${id}/set-hero`, {method:'POST', credentials:'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}});
+      const j = await res.json();
+      if (j.ok) location.reload();
+      else alert('Failed: '+(j.error||'unknown'));
+    } catch (err) {
+      alert('Network error: ' + err);
+    }
+  }
+});
+</script>
+
+{% endblock %}
+{% endblock %}

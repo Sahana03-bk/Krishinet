@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — KrishiNet{% endblock %}
+
+{% block head_extra %}
+<style>
+/* --- Container --- */
+.container-dashboard {
+  max-width: 1180px;
+  margin: 18px auto 48px;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+
+.dashboard-two-col {
+  display: grid;
+  grid-template-columns: 1fr 320px; /* left flexible, right fixed */
+  gap: 20px;
+  align-items: start;
+}
+
+
+
+/* --- Profile Card (left column) --- */
+.profile-card {
+  background: linear-gradient(180deg, #eef9ef 0%, #f7fbf7 100%);
+  border-radius: 14px;
+  padding: 18px;
+  border: 1px solid rgba(34,96,39,0.06);
+  box-shadow: 0 6px 20px rgba(15,60,20,0.04);
+  margin-bottom: 18px;
+}
+
+/* header layout inside profile */
+.profile-header {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.profile-avatar {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  background: linear-gradient(180deg,#dff4df,#fff);
+  box-shadow: 0 8px 20px rgba(15,60,20,0.06);
+  font-weight: 700;
+  color: #1b5d2b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+}
+.profile-info { flex: 1; min-width: 200px; }
+.profile-info h4 { margin: 0; font-weight: 700; color: #1b5d2b; font-size: 1.25rem; }
+.profile-info .location { margin-top: 6px; color: #5e7960; font-size: 0.95rem; }
+
+/* chips and actions */
+.chips { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { display: inline-flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 20px; background: #fff; border: 1px solid rgba(15,60,20,0.03); color: #1b5d2b; font-weight: 600; font-size: 0.9rem; }
+.profile-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; justify-content: flex-end; flex-wrap: wrap; }
+.btn-update { background: transparent; border: 1px solid rgba(23,100,38,0.08); color: #164f27; padding: 8px 12px; border-radius: 8px; }
+.btn-delete { background: transparent; border: 1px solid rgba(220,53,69,0.12); color: #b02a37; padding: 8px 12px; border-radius: 8px; }
+
+/* upload row */
+.upload-row { margin-top: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.upload-row .form-control { flex: 1; min-width: 200px; }
+.btn-upload { background: #1f8f3f; color: #fff; border: none; padding: 10px 14px; border-radius: 8px; }
+
+/* follow links */
+.follow-links { margin-top: 12px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.follow-links a { color: #1b6b36; font-weight:600; text-decoration:none; }
+
+/* --- Left main area below profile (stats etc.) */
+.left-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* stats */
+.stats-section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid rgba(15,60,20,0.03);
+  box-shadow: 0 8px 16px rgba(10,40,20,0.02);
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(150px,1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.stat-card {
+  background: #f8fcf8;
+  padding: 12px;
+  border-radius: 10px;
+  text-align: center;
+  border: 1px solid rgba(15,60,20,0.03);
+}
+.stat-card .value { font-weight: 800; color: #17642a; font-size: 1.2rem; }
+.stat-card .label { color: #6c7d6b; margin-top: 6px; font-size: 0.95rem; }
+
+/* --- Quick menu (right column) --- */
+.quick-menu {
+  position: sticky;
+  top: 18px; /* keeps quick menu visible as user scrolls */
+  border-radius: 12px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid rgba(15,60,20,0.03);
+  box-shadow: 0 8px 18px rgba(10,40,20,0.02);
+}
+.quick-menu h5 { color: #164f27; margin-bottom: 12px; font-weight: 700; }
+.quick-menu a { display: flex; gap: 10px; align-items: center; text-decoration: none; color: #1b6b36; padding: 8px; border-radius: 8px; }
+.quick-menu a:hover { background: #f3fbf3; transform: translateX(3px); }
+
+/* quick-dropdown styling */
+.quick-dropdown {
+  background: #f1f8f1;
+  border: 1px solid rgba(15,60,20,0.08);
+  color: #164f27;
+  padding: .45rem .6rem;
+  border-radius: 8px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.quick-dropdown:focus, .quick-dropdown:hover {
+  background: #e8f7e8;
+  box-shadow: 0 3px 10px rgba(23,100,38,0.06);
+  transform: translateY(-1px);
+}
+.quick-menu .dropdown-menu { border-radius: 8px; overflow: hidden; }
+.quick-menu .dropdown-item { padding: .6rem 0.9rem; }
+.quick-menu .dropdown-item i { color: #1b6b36; min-width: 18px; text-align:center; }
+
+/* notification badge */
+#sidebarNotifBadge { margin-left: 6px; }
+
+/* ensure small screens have good spacing */
+@media (max-width: 576px) {
+  .profile-header { align-items: flex-start; }
+  .profile-actions { justify-content: center; width:100%; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-dashboard">
+
+  <div class="dashboard-two-col">
+    <!-- LEFT COLUMN: profile + main -->
+    <div>
+      <!-- Profile card -->
+      <section class="profile-card" aria-label="Profile summary">
+        <div class="profile-header w-100">
+          {% if user and user.profile_photo %}
+            <img src="{{ url_for('static', filename='uploads/' ~ user.profile_photo) }}" class="profile-avatar" alt="Profile photo of {{ user.name }}">
+          {% else %}
+            <div class="profile-avatar" aria-hidden="true">{{ (user.name[0] if user and user.name else 'U') | upper }}</div>
+          {% endif %}
+
+          <div class="profile-info">
+            <h4>{{ user.name if user else 'Farmer' }}</h4>
+            <div class="location" aria-label="location">
+              {% if user and user.city %}{{ user.city }}{% endif %}
+              {% if user and user.city and user.district %}, {% endif %}
+              {% if user and user.district %}{{ user.district }}{% endif %}
+              {% if user and user.state %}, {{ user.state }}{% endif %}
+            </div>
+
+            <div class="chips" role="list">
+              <div class="chip" role="listitem"><i class="fas fa-envelope" aria-hidden="true"></i> {{ user.email if user else '' }}</div>
+              <div class="chip" role="listitem"><i class="fas fa-phone" aria-hidden="true"></i> {{ user.phone if user else '' }}</div>
+              <div class="chip" role="listitem"><i class="fas fa-id-card" aria-hidden="true"></i> ID: {{ user.id if user else '-' }}</div>
+            </div>
+          </div>
+
+          <div class="profile-actions" aria-label="profile actions">
+            <a href="{{ url_for('profile_edit') }}" class="btn-update" title="Edit profile"><i class="fas fa-edit" aria-hidden="true"></i> Edit Profile</a>
+
+            <form action="{{ url_for('profile_delete') }}" method="post" onsubmit="return confirm('Are you sure you want to delete your account?');" style="display:inline;">
+              <button class="btn-delete" type="submit" title="Delete account"><i class="fas fa-trash-alt" aria-hidden="true"></i> Delete</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Upload row -->
+        <form class="upload-row w-100" action="{{ url_for('upload_profile_photo') }}" method="post" enctype="multipart/form-data" aria-label="Upload profile photo">
+          <input name="photo" type="file" accept="image/png, image/jpeg, image/gif, image/webp" class="form-control" required onchange="previewImage(this)" aria-label="Choose profile photo">
+          <button class="btn-upload" type="submit"><i class="fas fa-upload" aria-hidden="true"></i> Upload</button>
+          <div class="text-muted small">PNG, JPG, GIF or WEBP. Max 8MB</div>
+        </form>
+
+        <div class="follow-links">
+          <a href="{{ url_for('view_followers', user_id=user.id) }}">
+            <i class="fas fa-users" aria-hidden="true"></i> <strong>{{ followers or 0 }}</strong> Followers
+          </a>
+          <a href="{{ url_for('view_following', user_id=user.id) }}">
+            <i class="fas fa-user-friends" aria-hidden="true"></i> <strong>{{ following or 0 }}</strong> Following
+          </a>
+        </div>
+      </section>
+
+        <!-- you can add more left-column cards here (recent activity, posts, etc.) -->
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Quick menu -->
+    <aside class="quick-menu" aria-label="Sidebar quick menu">
+      <h5>Quick Menu</h5>
+
+      <!-- Equipment Rentals dropdown
+      <div class="mb-2">
+        <div class="dropdown">
+          <button class="btn btn-sm dropdown-toggle w-100 text-start d-flex justify-content-between align-items-center quick-dropdown"
+                  type="button" id="rentalsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            <span><i class="fas fa-tractor me-2" aria-hidden="true"></i> Equipment Rentals</span>
+            <span class="small text-muted">Manage & Browse</span>
+          </button>
+
+          <ul class="dropdown-menu w-100" aria-labelledby="rentalsDropdown">
+            <li><a class="dropdown-item" href="{{ url_for('rental.index') }}"><i class="fas fa-search me-2"></i> Browse Rentals</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('rental.my_listings') }}"><i class="fas fa-list me-2"></i> My Listings </a></li>
+            <li><a class="dropdown-item" href="{{ url_for('rental.owner_requests') }}"><i class="fas fa-inbox me-2"></i> Owner Inbox </a></li>
+            <li><a class="dropdown-item" href="{{ url_for('rental.my_requests') }}"><i class="fas fa-calendar-check me-2"></i> My Requests </a></li>
+            <li><a class="dropdown-item" href="{{ url_for('rental.rental_new') }}"><i class="fas fa-plus-circle me-2"></i> Post New Listing</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('profile.my_payments') }}"><i class="fas fa-file-invoice-dollar me-2"></i> Payments / Invoices</a></li>
+          </ul>
+        </div>
+      </div> -->
+
+      <!-- Marketplace dropdown -->
+      <div class="mb-3">
+        <div class="dropdown">
+          <button class="btn btn-sm dropdown-toggle w-100 text-start d-flex justify-content-between align-items-center quick-dropdown"
+                  type="button" id="marketDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            <span><i class="fas fa-store me-2" aria-hidden="true"></i> Marketplace</span>
+            <span class="small text-muted">Products</span>
+          </button>
+
+          <ul class="dropdown-menu w-100" aria-labelledby="marketDropdown">
+            <li><a class="dropdown-item" href="{{ url_for('marketplace.index') }}"><i class="fas fa-shopping-bag me-2"></i> Browse Products</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('marketplace.my_posts') }}"><i class="fas fa-list-alt me-2"></i> My Products</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('marketplace.product_new') }}"><i class="fas fa-plus-circle me-2"></i> Post Product</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('marketplace.purchase_history') }}"><i class="fas fa-history me-2"></i> Purchase History</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <a href="{{ url_for('find_farmers') }}"><i class="fas fa-users me-2" aria-hidden="true"></i> Find Farmers</a>
+
+      <a href="{{ url_for('notifications_page') }}" class="d-flex align-items-center justify-content-between mt-2">
+        <span><i class="fas fa-bell me-2" aria-hidden="true"></i> Notifications</span>
+        <span id="sidebarNotifBadge" class="badge bg-danger ms-2" style="display:none">0</span>
+      </a>
+
+      <!-- GrowLog links (replace the placeholder link above with this) -->
+<div class="d-flex align-items-center mt-2" style="gap:10px;">
+  <a href="{{ url_for('growlog_dashboard') }}" class="d-flex align-items-center" title="Manage your GrowLog videos">
+    <i class="fas fa-seedling me-2" aria-hidden="true"></i> Grow Log (My Videos)
+  </a>
+
+  <a href="{{ url_for('videos_public') }}" class="d-flex align-items-center" title="View community GrowLog gallery">
+    <i class="fas fa-globe me-2" aria-hidden="true"></i> Public Gallery
+    <span id="growlogBadge" class="badge bg-success ms-2" style="display:none">New</span>
+  </a>
+</div>
+
+
+    </aside>
+  </div>
+
+  <!-- Policy Modal (same as before) -->
+  <div class="modal fade" id="policyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Privacy & Data</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="policyModalBody">
+          <p>We store minimal account info for the app to run. You can delete your account to remove data.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Preview selected image before upload */
+function previewImage(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const avatarNode = document.querySelector('.profile-avatar');
+    if (!avatarNode) return;
+    if (avatarNode.tagName.toLowerCase() !== 'img') {
+      const img = document.createElement('img');
+      img.className = 'profile-avatar';
+      img.alt = 'Profile Photo';
+      avatarNode.parentNode.replaceChild(img, avatarNode);
+      img.src = e.target.result;
+    } else {
+      avatarNode.src = e.target.result;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+/* Fetch unread notifications count and update sidebar badge */
+async function updateSidebarBadge(){
+  try{
+    const r = await fetch('{{ url_for("api_notifications_unread_count") }}', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    const j = await r.json();
+    const b = document.getElementById('sidebarNotifBadge');
+    if (j && j.unread && j.unread > 0) {
+      b.style.display = 'inline-block';
+      b.textContent = j.unread;
+    } else {
+      b.style.display = 'none';
+    }
+  }catch(e){ console.error(e); }
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  updateSidebarBadge();
+});
+</script>
+{% endblock %}

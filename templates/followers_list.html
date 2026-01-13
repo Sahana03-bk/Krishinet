@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if mode == "followers" %}Followers of {{ owner.name }}{% else %}Following of {{ owner.name }}{% endif %}
+{% endblock %}
+
+{% block head_extra %}
+<style>
+/* Compact, clean card list for followers/following */
+.container-dashboard { max-width: 1100px; margin: 0 auto; padding: 8px 12px 40px; }
+.list-wrap { background: #fff; padding: 18px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.04); }
+.person-card {
+  display:flex; gap:14px; align-items:center;
+  padding:12px; border-radius:10px; background:#fbfdfb;
+  border:1px solid rgba(15,60,20,0.03);
+}
+.person-card + .person-card { margin-top:12px; }
+.person-avatar { width:64px; height:64px; border-radius:8px; object-fit:cover; flex:0 0 64px; background:#f0f8f0; display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--green-1); }
+.person-meta { flex:1; }
+.person-meta .name { font-weight:700; color:var(--green-1); font-size:1.05rem; }
+.person-meta .meta { color:#6c7d6b; font-size:0.95rem; margin-top:4px; }
+.card-actions { display:flex; gap:8px; align-items:center; }
+.btn-view { border:1px solid rgba(15,100,40,0.12); background:white; color:var(--green-1); }
+.btn-follow { min-width:96px; }
+.empty-note { color:#6c757d; padding:16px 0; }
+.small-count { color:#6c7d6b; margin-top:12px; }
+@media (max-width:720px){
+  .person-card { flex-direction:column; align-items:flex-start; }
+  .card-actions { width:100%; justify-content:space-between; margin-top:8px; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-dashboard">
+  <h4 class="mb-3">
+    {% if mode == "followers" %}
+      <i class="fas fa-users"></i> Followers of {{ owner.name }}
+    {% else %}
+      <i class="fas fa-user-friends"></i> {{ owner.name }} is Following
+    {% endif %}
+  </h4>
+
+  <div class="list-wrap">
+    {% if people %}
+      {% for p in people %}
+        <div class="person-card" data-id="{{ p.id }}">
+          {% if p.profile_photo %}
+            <img src="{{ url_for('static', filename='uploads/' ~ p.profile_photo) }}" alt="avatar" class="person-avatar">
+          {% else %}
+            <div class="person-avatar">{{ (p.name[0] if p.name else '?') | upper }}</div>
+          {% endif %}
+
+          <div class="person-meta">
+            <div class="name">{{ p.name }} <small class="text-muted">ID: {{ p.id }}</small></div>
+            <div class="meta">
+              {% if p.city %}{{ p.city }}{% endif %}
+              {% if p.city and p.district %}, {% endif %}
+              {% if p.district %}{{ p.district }}{% endif %}
+              {% if p.state %}, {{ p.state }}{% endif %}
+            </div>
+          </div>
+
+          <div class="card-actions">
+            <a href="{{ url_for('view_farmer', uid=p.id) }}" class="btn btn-sm btn-view">
+              <i class="fas fa-eye"></i> View
+            </a>
+
+            {% if p.id != (user.id if user else None) %}
+              {% set is_following = (p.id in (following_set or [])) %}
+              <button class="btn btn-sm btn-follow {% if is_following %}btn-danger unfollow{% else %}btn-success follow{% endif %}"
+                      data-target-id="{{ p.id }}">
+                {% if is_following %}
+                  <i class="fas fa-user-times"></i> Unfollow
+                {% else %}
+                  <i class="fas fa-user-plus"></i> Follow
+                {% endif %}
+              </button>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+      <div class="small-count">Showing {{ people|length }} {{ mode }}</div>
+    {% else %}
+      <div class="empty-note">No {{ mode }} yet.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("click", async function (e) {
+  const btn = e.target.closest('.btn-follow');
+  if (!btn) return;
+
+  const targetId = btn.dataset.targetId;
+  if (!targetId) return;
+
+  btn.disabled = true;
+  const isUnfollow = btn.classList.contains('unfollow');
+  const url = isUnfollow ? `/api/unfollow/${targetId}` : `/api/follow/${targetId}`;
+
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    const data = await res.json();
+    if (!data.ok) {
+      alert("Action failed: " + (data.error || 'unknown'));
+      return;
+    }
+
+    // Toggle UI state
+    if (data.action === 'followed') {
+      btn.classList.remove('btn-success', 'follow');
+      btn.classList.add('btn-danger', 'unfollow');
+      btn.innerHTML = '<i class="fas fa-user-times"></i> Unfollow';
+    } else if (data.action === 'unfollowed') {
+      btn.classList.remove('btn-danger', 'unfollow');
+      btn.classList.add('btn-success', 'follow');
+      btn.innerHTML = '<i class="fas fa-user-plus"></i> Follow';
+    }
+
+  } catch (err) {
+    console.error(err);
+    alert('Network error; try again.');
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,223 @@
+:root {
+            --primary: #2e7d32;
+            --secondary: #7cb342;
+            --accent: #ff9800;
+            --light: #f8f9fa;
+            --dark: #2c3e50;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)), url('https://images.unsplash.com/photo-1500937386664-56d1dfef3854?ixlib=rb-4.0.3&auto=format&fit=crop&w=1600&q=80');
+            background-size: cover;
+            background-position: center;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 20px 0;
+        }
+        
+        .registration-container {
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .registration-left {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .registration-right {
+            padding: 40px;
+        }
+        
+        .registration-logo {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 2rem;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .form-title {
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 30px;
+            text-align: center;
+            position: relative;
+            padding-bottom: 15px;
+        }
+        
+        .form-title:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 4px;
+            background-color: var(--primary);
+            border-radius: 2px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .form-group label {
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 8px;
+        }
+        
+        .form-control {
+            padding: 12px 15px;
+            border: 2px solid #e1e5eb;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 0.2rem rgba(46, 125, 50, 0.25);
+        }
+        
+        .input-group-text {
+            background-color: white;
+            border: 2px solid #e1e5eb;
+            border-right: none;
+            border-radius: 8px 0 0 8px;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+        }
+        
+        .btn-primary:hover {
+            background-color: #1b5e20;
+            border-color: #1b5e20;
+            transform: translateY(-2px);
+        }
+        
+        .btn-outline-primary {
+            color: var(--primary);
+            border-color: var(--primary);
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+        }
+        
+        .btn-outline-primary:hover {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .login-link {
+            text-align: center;
+            margin-top: 20px;
+            color: var(--dark);
+        }
+        
+        .login-link a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .feature-list {
+            list-style-type: none;
+            padding: 0;
+            margin-top: 30px;
+        }
+        
+        .feature-list li {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .feature-list i {
+            background-color: rgba(255, 255, 255, 0.2);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+        }
+        
+        .step-progress {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            position: relative;
+        }
+        
+        .step-progress:before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: #e1e5eb;
+            z-index: 1;
+        }
+        
+        .step {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #e1e5eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--dark);
+            position: relative;
+            z-index: 2;
+        }
+        
+        .step.active {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .step-label {
+            position: absolute;
+            top: 35px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            white-space: nowrap;
+            color: var(--dark);
+        }
+        
+        .step-progress-container {
+            position: relative;
+        }
+        
+        @media (max-width: 768px) {
+            .registration-left {
+                display: none;
+            }
+        }

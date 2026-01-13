@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — KrishiNet{% endblock %}
+
+{% block head_extra %}
+<style>
+/* container inside main (keeps distance from fixed header) */
+.container-dashboard {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 8px 12px 40px; /* extra bottom padding so footer doesn't overlap */
+}
+
+/* Profile Card */
+.profile-card {
+  background: linear-gradient(180deg, #eef9ef 0%, #f7fbf7 100%);
+  border-radius: 14px;
+  padding: 18px;
+  border: 1px solid rgba(34, 96, 39, 0.06);
+  box-shadow: 0 6px 20px rgba(15, 60, 20, 0.04);
+  margin-bottom: 18px;
+}
+
+/* header area inside profile card */
+.profile-header { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+.profile-avatar {
+  width:92px; height:92px; border-radius:50%; object-fit:cover;
+  border:4px solid #fff; background:linear-gradient(180deg,#dff4df,#fff);
+  box-shadow: 0 8px 20px rgba(15,60,20,0.06); font-weight:700; color:#1b5d2b;
+  display:flex; align-items:center; justify-content:center; font-size:1.6rem;
+}
+.profile-info { flex:1; min-width:200px; }
+.profile-info h4 { margin:0; font-weight:700; color:#1b5d2b; font-size:1.25rem; }
+.profile-info .location { margin-top:6px; color:#5e7960; font-size:0.95rem; }
+
+/* chips */
+.chips { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+.chip { display:inline-flex; gap:8px; align-items:center; padding:8px 12px; border-radius:20px; background:#fff; border:1px solid rgba(15,60,20,0.03); color:#1b5d2b; font-weight:600; font-size:0.9rem; }
+
+/* profile actions align to right on wide screens, center on small */
+.profile-actions { display:flex; gap:10px; align-items:center; margin-top:12px; justify-content:flex-end; flex-wrap:wrap; }
+
+/* upload row */
+.upload-row { margin-top:12px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.upload-row .form-control { flex:1; min-width:200px; }
+.btn-upload { background:#1f8f3f; color:#fff; border:none; padding:.45rem .9rem; border-radius:8px; }
+
+/* dashboard main layout and sidebar */
+.dashboard-layout { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+.dashboard-main { flex:1; min-width:300px; }
+.dashboard-sidebar { width:280px; min-width:240px; }
+
+/* stats */
+.stats-section { background:#fff; border-radius:12px; padding:14px; border:1px solid rgba(15,60,20,0.03); box-shadow:0 8px 16px rgba(10,40,20,0.02); margin-bottom:18px; }
+.stats-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+.stat-card { background:#f8fcf8; padding:12px; border-radius:10px; text-align:center; border:1px solid rgba(15,60,20,0.03); }
+.stat-card .value { font-weight:800; color:#17642a; font-size:1.2rem; }
+.stat-card .label { color:#6c7d6b; margin-top:6px; font-size:0.95rem; }
+
+/* quick menu */
+.quick-menu { border-radius:12px; padding:14px; background:#fff; border:1px solid rgba(15,60,20,0.03); box-shadow:0 8px 18px rgba(10,40,20,0.02); }
+.quick-menu h5 { color:#164f27; margin-bottom:12px; font-weight:700; }
+.quick-menu a { display:flex; gap:10px; align-items:center; text-decoration:none; color:#1b6b36; padding:8px; border-radius:8px; }
+.quick-menu a:hover { background:#f3fbf3; transform:translateX(3px); }
+
+/* small screens */
+@media (max-width: 768px) {
+  .dashboard-layout { flex-direction:column; }
+  .dashboard-sidebar { width:100%; }
+  .profile-actions { justify-content:center; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-dashboard">
+  <!-- Profile Card -->
+  <div class="profile-card">
+    <div class="profile-header w-100">
+      {% if user and user.profile_photo %}
+        <img src="{{ url_for('static', filename='uploads/' ~ user.profile_photo) }}" class="profile-avatar" alt="avatar">
+      {% else %}
+        <div class="profile-avatar">{{ (user.name[0] if user and user.name else 'U') | upper }}</div>
+      {% endif %}
+
+      <div class="profile-info">
+        <h4>{{ user.name if user else 'Farmer' }}</h4>
+        <div class="location">
+          {% if user and user.city %}{{ user.city }}{% endif %}
+          {% if user and user.city and user.district %}, {% endif %}
+          {% if user and user.district %}{{ user.district }}{% endif %}
+          {% if user and user.state %}, {{ user.state }}{% endif %}
+        </div>
+
+        <div class="chips">
+          <div class="chip"><i class="fas fa-envelope"></i> {{ user.email if user else '' }}</div>
+          <div class="chip"><i class="fas fa-phone"></i> {{ user.phone if user else '' }}</div>
+          <div class="chip"><i class="fas fa-id-card"></i> ID: {{ user.id if user else '-' }}</div>
+        </div>
+      </div>
+
+      <div class="profile-actions">
+        <a href="{{ url_for('profile_edit') }}" class="btn btn-update"><i class="fas fa-edit"></i> Edit Profile</a>
+
+        <form action="{{ url_for('profile_delete') }}" method="post" onsubmit="return confirm('Are you sure you want to delete your account?');" style="display:inline;">
+          <button class="btn btn-outline-danger btn-delete" type="submit"><i class="fas fa-trash-alt"></i> Delete</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Upload row (full width under header) -->
+    <form class="upload-row w-100" action="{{ url_for('upload_profile_photo') }}" method="post" enctype="multipart/form-data">
+      <input name="photo" type="file" accept="image/*" class="form-control" required onchange="previewImage(this)">
+      <button class="btn-upload" type="submit"><i class="fas fa-upload"></i> Upload</button>
+      <div class="text-muted small">PNG, JPG, GIF or WEBP. Max 8MB</div>
+    </form>
+
+    <div style="margin-top:12px;">
+      <a href="{{ url_for('view_followers', user_id=user.id) }}" class="me-3">
+        <i class="fas fa-users"></i> {{ followers or 0 }} Followers
+      </a>
+      <a href="{{ url_for('view_following', user_id=user.id) }}">
+        <i class="fas fa-user-friends"></i> {{ following or 0 }} Following
+      </a>
+    </div>
+  </div>
+
+  <!-- Dashboard Layout -->
+  <div class="dashboard-layout">
+    <div class="dashboard-main">
+      <div class="stats-section">
+        <h5><i class="fas fa-chart-line"></i> Today's Activity</h5>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="value">0</div>
+            <div class="label">Items Sold</div>
+          </div>
+          <div class="stat-card">
+            <div class="value">₹0</div>
+            <div class="label">Revenue</div>
+          </div>
+          <div class="stat-card">
+            <div class="value">0</div>
+            <div class="label">Orders</div>
+          </div>
+          <div class="stat-card">
+            <div class="value">0</div>
+            <div class="label">New Messages</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-sidebar">
+      <div class="quick-menu">
+        <h5>Quick Menu</h5>
+        <a href="#"><i class="fas fa-tractor"></i> Farm Management</a>
+        <a href="{{ url_for('find_farmers') }}"><i class="fas fa-users"></i> Find Farmers</a>
+        <a href="#"><i class="fas fa-comments"></i> Messages <span class="badge bg-success ms-auto">2</span></a>
+        <a href="{{ url_for('notifications_page') }}"><i class="fas fa-bell"></i> Notifications
+          <span id="sidebarNotifBadge" class="badge bg-danger ms-auto" style="display:none">0</span>
+        </a>
+        <a href="#"><i class="fas fa-map-marked-alt"></i> Farm Map</a>
+        <a href="#"><i class="fas fa-seedling"></i> Grow Log</a>
+
+        <hr>
+
+        <div class="mb-2"><strong>Marketplace Products</strong>
+          <a href="{{ url_for('marketplace.product_new') }}" class="btn btn-sm btn-outline-success float-end">Post Product</a>
+        </div>
+
+        <!-- keep links to marketplace pages -->
+        <div class="d-flex flex-column gap-2">
+          <a href="{{ url_for('marketplace.index') }}">Browse Products</a>
+          <a href="{{ url_for('marketplace.my_posts') }}">My Products</a>
+          <a href="{{ url_for('marketplace.my_orders') }}">
+  <i class="fas fa-receipt"></i> Purchase History
+</a>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Policy Modal (kept minimal) -->
+<div class="modal fade" id="policyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="policyModalTitle">Policy</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="policyModalBody">
+        <h5>Privacy Policy</h5>
+        <p>We store minimal account info for the app to run. You can delete your account to remove data.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Preview selected image before upload */
+function previewImage(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        // find placeholder avatar (either div or img)
+        const avatarNode = document.querySelector('.profile-avatar');
+        if (!avatarNode) return;
+
+        // if current node is a DIV placeholder, replace it with an <img>
+        if (avatarNode.tagName.toLowerCase() !== 'img') {
+            const img = document.createElement('img');
+            img.className = 'profile-avatar';
+            img.alt = 'Profile Photo';
+            avatarNode.parentNode.replaceChild(img, avatarNode);
+            img.src = e.target.result;
+        } else {
+            avatarNode.src = e.target.result;
+        }
+    };
+    reader.readAsDataURL(file);
+}
+</script>
+
+<script>
+async function updateSidebarBadge(){
+  try{
+    const r = await fetch('{{ url_for("api_notifications_unread_count") }}');
+    const j = await r.json();
+    const b = document.getElementById('sidebarNotifBadge');
+    if (j.unread && j.unread > 0) {
+      b.style.display = 'inline-block';
+      b.textContent = j.unread;
+    } else {
+      b.style.display = 'none';
+    }
+  }catch(e){ console.error(e); }
+}
+document.addEventListener('DOMContentLoaded', updateSidebarBadge);
+</script>
+{% endblock %}

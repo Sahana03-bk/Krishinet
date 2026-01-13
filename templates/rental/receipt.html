@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Receipt — INV-{{ rr.id }}{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-start">
+    <div>
+      <h3>KrishiNet</h3>
+      <div class="small text-muted">Equipment Rental Receipt</div>
+    </div>
+    <div class="text-end">
+      <div><strong>Invoice:</strong> INV-{{ rr.id }}</div>
+      <div><strong>Date:</strong> {{ (payment.updated_at or payment.created_at) or "" }}</div>
+      <div><strong>Payment ID:</strong> {{ payment.external_id or payment.id }}</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="row">
+    <div class="col-md-6">
+      <h6>Owner</h6>
+      <div>{{ rr.owner_name or '—' }}</div>
+    </div>
+    <div class="col-md-6">
+      <h6>Renter</h6>
+      <div>{{ rr.renter_name or '—' }}</div>
+    </div>
+  </div>
+
+  <div class="box mt-3 p-3" style="border:1px solid #eee; border-radius:6px;">
+    <h5 style="margin:0 0 8px 0;">{{ rr.rental_title or rr.title }}</h5>
+    <div class="small text-muted">Duration: {{ rr.start_date }} → {{ rr.end_date }} • {{ rr.requested_days }} days</div>
+
+    <table class="table mt-3" style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="text-end">Amount (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# price_per_day fallback to payment or rr.price_per_day #}
+        {% set per_day = rr.price_per_day or payment.amount %}
+        {% set offered = rr.price_offered if rr.price_offered is defined and rr.price_offered else None %}
+        {% set days = rr.requested_days|default(1) %}
+        <tr>
+          <td>{{ days }} days × ₹{{ (offered if offered else per_day) }} / day</td>
+          <td class="text-end">₹{{ ((offered if offered else per_day) * days)|round(2) }}</td>
+        </tr>
+
+        {% if payment and payment.amount %}
+        <tr>
+          <td>Paid ({{ payment.method or '—' }})</td>
+          <td class="text-end">₹{{ payment.amount }}</td>
+        </tr>
+        {% endif %}
+
+        <tr>
+          <td class="fw-bold">Total</td>
+          <td class="text-end fw-bold">₹{{ payment.amount }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-3 text-muted small">
+    This is a system-generated receipt for the rental booking.
+  </div>
+
+  <div class="mt-3">
+    <a href="#" onclick="window.print(); return false;" class="btn btn-secondary btn-sm">Print / Save as PDF</a>
+  </div>
+</div>
+{% endblock %}

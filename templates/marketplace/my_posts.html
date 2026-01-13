@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>My Products ({{ posted_count }})</h2>
+
+{# pick a unit to display for the top totals: use first product's unit if available #}
+{% set top_unit = (products[0].quantity_unit if products and products[0].quantity_unit else "") %}
+
+<div>
+  <strong>Total sold:</strong>
+  {% set total_units = seller_totals.total_units_sold if seller_totals and seller_totals.total_units_sold is not none else 0 %}
+  {{ "{:.2f}".format(total_units) }}{% if top_unit %} {{ top_unit }}{% endif %} &nbsp;&nbsp;
+
+  <strong>Total revenue:</strong> ₹{{ "{:,.2f}".format(seller_totals.total_revenue if seller_totals and seller_totals.total_revenue is not none else 0) }}
+</div>
+
+<table class="table table-striped table-bordered mt-3">
+  <thead class="thead-light">
+    <tr>
+      <th>ID</th>
+      <th>Image</th>
+      <th>Title</th>
+      <th>Quantity</th>
+      <th>Price</th>
+      <th>Sold</th>
+      <th>Revenue</th>
+      <th>Posted</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in products %}
+    <tr>
+      <td>{{ p.id }}</td>
+      <td style="width:60px;">
+        {% if p.product_image %}
+          <img src="{{ url_for('static', filename='uploads/' ~ p.product_image) }}" alt="" style="height:40px;">
+        {% else %}
+          <img src="{{ url_for('static', filename='img/placeholder.png') }}" alt="" style="height:40px;">
+        {% endif %}
+      </td>
+      <td>{{ p.title }}</td>
+
+      {# Quantity with unit #}
+      <td>
+        {% set qty_val = p.quantity if p.quantity is not none else 0 %}
+        {{ "{:.2f}".format(qty_val) }}{% if p.quantity_unit %} {{ p.quantity_unit }}{% endif %}
+      </td>
+
+      <td>₹{{ "{:,.2f}".format(p.price if p.price is not none else 0) }}</td>
+
+      {# Sold cell: show sold_count with the product unit (if available) #}
+      <td>
+        {% set sold_count = p.sold_count if p.sold_count is not none else 0 %}
+        {{ "{:.2f}".format(sold_count) }}{% if p.quantity_unit %} {{ p.quantity_unit }}{% endif %}
+      </td>
+
+      <td>₹{{ "{:,.2f}".format(p.revenue if p.revenue is not none else 0) }}</td>
+
+      <td>{{ p.created_at }}</td>
+      <td>
+        <a class="btn btn-sm btn-primary" href="{{ url_for('marketplace.product_edit', pid=p.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('marketplace.product_delete', pid=p.id) }}" style="display:inline" onsubmit="return confirm('Delete product?');">
+          <button class="btn btn-sm btn-danger">Delete</button>
+        </form>
+        <a class="btn btn-sm btn-info" href="{{ url_for('marketplace.product_sales_detail', pid=p.id) }}">Sales</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9">You haven't posted any products yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- pagination -->
+<nav aria-label="product pages">
+  <ul class="pagination">
+    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+      <a class="page-link" href="{{ url_for('marketplace.my_posts', page=pagination.prev_page) }}">Previous</a>
+    </li>
+
+    {# show a few pages around current page #}
+    {% set start = pagination.page - 2 if pagination.page - 2 > 0 else 1 %}
+    {% set end = pagination.page + 2 if pagination.page + 2 <= pagination.total_pages else pagination.total_pages %}
+    {% for pn in range(start, end+1) %}
+      <li class="page-item {% if pn == pagination.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('marketplace.my_posts', page=pn) }}">{{ pn }}</a>
+      </li>
+    {% endfor %}
+
+    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+      <a class="page-link" href="{{ url_for('marketplace.my_posts', page=pagination.next_page) }}">Next</a>
+    </li>
+  </ul>
+</nav>
+
+{% endblock %}

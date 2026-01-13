@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+{% block title %}{{ rental.title }} — KrishiNet{% endblock %}
+
+{% block head_extra %}
+<!-- FullCalendar CSS -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
+<!-- Stripe.js (optional client redirect fallback when sessionId is returned) -->
+<script src="https://js.stripe.com/v3/"></script>
+
+<style>
+  #rental-calendar { max-width:100%; margin-top:8px; }
+  .fc .fc-daygrid-event .fc-event-title { white-space:normal; }
+  .blocked-note { font-size:0.9rem; color:#7a7a7a; margin-top:6px; }
+  .date-error { color:#b02a37; font-weight:600; margin-top:6px; display:none; }
+
+  /* Gallery styles */
+  .gallery-main {
+    width:100%;
+    height:460px;
+    border-radius:8px;
+    overflow:hidden;
+    background:#f5f5f5;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 6px 18px rgba(0,0,0,0.06);
+  }
+  .gallery-main img { width:100%; height:100%; object-fit:cover; display:block; }
+
+  .thumb-rail {
+    display:flex;
+    gap:10px;
+    overflow:auto;
+    padding:8px 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .thumb-item { position:relative; flex:0 0 auto; width:140px; height:96px; border-radius:6px; overflow:hidden; cursor:pointer; border:2px solid transparent; }
+  .thumb-item img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .18s ease; }
+  .thumb-item:focus, .thumb-item:hover { outline:none; transform:translateY(-2px); }
+  .thumb-item.active { border-color:#0d6efd; box-shadow:0 6px 18px rgba(13,110,253,0.08); }
+
+  .thumb-actions {
+    position:absolute;
+    right:6px;
+    top:6px;
+    display:flex;
+    gap:6px;
+  }
+  .thumb-actions button { padding:4px 6px; font-size:12px; line-height:1; }
+
+  @media (max-width: 768px) {
+    .gallery-main { height:320px; }
+    .thumb-item { width:110px; height:76px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="fa-solid fa-house"></i> Back to Dashboard
+  </a>
+</div>
+
+<div class="container my-4">
+  <div class="row">
+    <div class="col-md-7">
+      <h3>{{ rental.title }}</h3>
+      <p class="text-muted">{{ rental.category }} • {{ rental.location }}</p>
+      <p>{{ rental.description }}</p>
+      <p><strong>Price:</strong> ₹{{ rental.price_per_day }} / day</p>
+      <p><strong>Deposit:</strong> ₹{{ rental.deposit or 0 }}</p>
+
+      <p>Owner:
+        <a href="{{ url_for('profile.owner_profile', owner_id=rental.owner_id) }}">{{ rental.owner_name }}</a>
+      </p>
+
+      {% if session.get('user_id') and session.get('user_id') == rental.owner_id %}
+        <div class="mb-3">
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('rental.rental_edit', rid=rental.id) }}">Edit</a>
+
+          <form method="post" action="{{ url_for('rental.rental_delete', rid=rental.id) }}" style="display:inline;" onsubmit="return confirm('Delete this listing? This cannot be undone');">
+            <button class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </div>
+      {% endif %}
+
+      <!-- ===== Gallery: main image + rail ===== -->
+      <div class="mb-3">
+        <div class="gallery-main" id="galleryMain">
+          {% if medias and medias|length > 0 %}
+            {# prefer hero_filename on rental, else the first media #}
+            {% set hero_src = (rental.hero_filename if rental.hero_filename else (medias[0].filename if medias[0] else '')) %}
+            <img id="mainMedia" src="{{ url_for('static', filename='uploads/' ~ hero_src) }}" alt="Main image" loading="eager">
+          {% else %}
+            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#777;">No images available</div>
+          {% endif %}
+        </div>
+
+        <div class="thumb-rail mt-2" id="thumbRail" role="list">
+          {% for m in medias %}
+            <div class="thumb-item" tabindex="0" data-filename="{{ m.filename }}" data-img-id="{{ m.id }}" role="listitem" aria-label="Thumbnail {{ loop.index }}">
+              <img loading="lazy" src="{{ url_for('static', filename='uploads/' ~ m.filename) }}" alt="thumb-{{ loop.index }}">
+              {% if session.get('user_id') and session.get('user_id') == rental.owner_id %}
+                <div class="thumb-actions">
+                  <button class="btn btn-sm btn-outline-danger btn-delete-img" data-img-id="{{ m.id }}" title="Delete image">🗑</button>
+                  <button class="btn btn-sm btn-outline-primary btn-set-hero" data-img-id="{{ m.id }}" title="Set as main">★</button>
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if session.get('user_id') and session.get('user_id') != rental.owner_id %}
+      <hr>
+
+      {# --- If the current user already made a request, show request status and payment options --- #}
+      {% if my_request %}
+        <h5>Your request</h5>
+        <div class="mb-2">
+          Status: <strong>{{ my_request.status }}</strong><br>
+          {{ my_request.start_date }} → {{ my_request.end_date }} • {{ my_request.requested_days }} days<br>
+          Total: ₹{{ my_request.price_offered or (rental.price_per_day * my_request.requested_days) }}
+
+        </div>
+
+                {% if my_request.status in ['accepted', 'completed'] and (my_request.payment_status is not defined or my_request.payment_status != 'completed') %}
+          <div class="mb-3">
+            <p>Please pay to confirm booking. Choose:</p>
+            <div class="d-flex gap-2 flex-wrap">
+              <button id="payAdvanceBtn" class="btn btn-sm btn-primary" data-req="{{ my_request.id }}" data-type="advance">Pay Advance</button>
+              <button id="payFullBtn" class="btn btn-sm btn-success" data-req="{{ my_request.id }}" data-type="full">Pay Full</button>
+            </div>
+            <div id="paymentStatus" class="mt-2 small text-muted"></div>
+          </div>
+        {% elif my_request.payment_status == 'completed' or my_request.status == 'paid' %}
+          <div class="alert alert-success">Payment complete. Booking confirmed.</div>
+
+        {% else %}
+          <form method="post" action="{{ url_for('rental.request_action', req_id=my_request.id) }}">
+            <input type="hidden" name="action" value="cancel">
+            <button class="btn btn-outline-danger btn-sm">Cancel Request</button>
+          </form>
+        {% endif %}
+
+      {# --- otherwise show the request form --- #}
+      {% else %}
+        <h5>Request this equipment</h5>
+        <form id="requestForm" method="post" action="{{ url_for('rental.request_rental', rid=rental.id) }}">
+          <div class="row g-2">
+            <div class="col-md-5">
+              <label>Start</label>
+              <input id="renterStart" type="date" name="start_date" class="form-control" required>
+            </div>
+            <div class="col-md-5">
+              <label>End</label>
+              <input id="renterEnd" type="date" name="end_date" class="form-control" required>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button id="requestBtn" class="btn btn-primary w-100">Request</button>
+            </div>
+          </div>
+          <div id="dateError" class="date-error">Selected dates conflict with existing bookings/unavailability.</div>
+          <div id="blockedNote" class="blocked-note">Blocked / booked days are shown on the calendar (red = busy, orange = pending, gray = blocked).</div>
+        </form>
+      {% endif %}
+      {% endif %}
+    </div>
+
+    <div class="col-md-5">
+      <!-- Calendar + Block form -->
+      <div class="card p-3">
+        <h6>Availability</h6>
+        <div id="rental-calendar"></div>
+
+        {% if session.get('user_id') and session.get('user_id') == rental.owner_id %}
+          <hr>
+          <h6>Block Dates (owner)</h6>
+          <form id="blockForm" method="post" action="{{ url_for('rental.mark_unavailability', rid=rental.id) }}">
+            <div class="mb-2"><label>Start</label><input type="date" name="start_date" id="blockStart" class="form-control" required></div>
+            <div class="mb-2"><label>End</label><input type="date" name="end_date" id="blockEnd" class="form-control" required></div>
+            <div class="mb-2"><label>Reason</label><input name="reason" id="blockReason" class="form-control"></div>
+            <button class="btn btn-warning">Block Dates</button>
+          </form>
+          <div class="mt-2 small text-muted">Tip: drag on the calendar to select a range — it will fill the block form for you.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+
+<script>
+/* Calendar + blocked date UX (mostly unchanged) */
+const RENTAL_EVENTS_URL = "{{ url_for('rental.rental_events', rid=rental.id) }}";
+const isOwner = {{ 'true' if (session.get('user_id') and session.get('user_id') == rental.owner_id) else 'false' }};
+
+function isoToYMD(dStr) { if (!dStr) return null; return dStr.slice(0,10); }
+function expandRange(start, end) {
+  const out = []; let cur = new Date(start); const last = new Date(end);
+  while (cur <= last) { out.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate() + 1); }
+  return out;
+}
+
+document.addEventListener('DOMContentLoaded', async function(){
+  // fetch events and populate blockedSet
+  let events = [];
+  try { const resp = await fetch(RENTAL_EVENTS_URL, { credentials: 'same-origin' }); events = await resp.json(); }
+  catch (e) { console.error("Failed to load events", e); }
+
+  const blockedSet = new Set();
+  events.forEach(ev => {
+    const t = ev.extendedProps && ev.extendedProps.type ? ev.extendedProps.type : null;
+    if (t === 'booking') {
+      const status = ev.extendedProps.status || '';
+      if (['accepted','paid','ongoing'].includes(status) || status === 'requested') {
+        const s = isoToYMD(ev.start); const e = isoToYMD(ev.end);
+        if (s && e) expandRange(s,e).forEach(d => blockedSet.add(d));
+      }
+    } else if (t === 'unavailability' || ev.color === '#6c757d') {
+      const s = isoToYMD(ev.start); const e = isoToYMD(ev.end);
+      if (s && e) expandRange(s,e).forEach(d => blockedSet.add(d));
+    }
+  });
+
+  // calendar init
+  const calendarEl = document.getElementById('rental-calendar');
+  if (calendarEl) {
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: 'dayGridMonth',
+      headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek' },
+      selectable: isOwner, selectMirror: true, dayMaxEvents: true, events: events,
+      select: function(info) {
+        if (isOwner) {
+          const s = info.startStr;
+          const endDate = new Date(info.end);
+          endDate.setDate(endDate.getDate() - 1);
+          const endISO = endDate.toISOString().slice(0,10);
+          document.getElementById('blockStart').value = s;
+          document.getElementById('blockEnd').value = endISO;
+          document.getElementById('blockStart').scrollIntoView({behavior:'smooth', block:'center'});
+        }
+      },
+      eventClick: function(info) {
+        const ev = info.event; const props = ev.extendedProps || {};
+        const title = ev.title || ''; const status = props.status ? ' • ' + props.status : '';
+        alert(title + status);
+      }
+    });
+    calendar.render();
+  }
+
+  // renter date inputs behavior
+  const renterStart = document.getElementById('renterStart');
+  const renterEnd = document.getElementById('renterEnd');
+  const dateError = document.getElementById('dateError');
+  const requestBtn = document.getElementById('requestBtn');
+  function isDateBlocked(dateStr) { return blockedSet.has(dateStr); }
+  function markInvalid(show, msg) { if (!dateError) return; dateError.style.display = show ? 'block' : 'none'; if (msg) dateError.textContent = msg; }
+  const today = new Date().toISOString().slice(0,10);
+  if (renterStart) renterStart.setAttribute('min', today);
+  if (renterEnd) renterEnd.setAttribute('min', today);
+  async function validateRenterDates() {
+    if (!renterStart || !renterEnd) return true;
+    const s = renterStart.value; const e = renterEnd.value;
+    if (!s || !e) { markInvalid(false); return false; }
+    if (s > e) { markInvalid(true, "Start date must be before or equal to End date."); return false; }
+    const range = expandRange(s, e);
+    for (const d of range) if (isDateBlocked(d)) { markInvalid(true, "Selected dates conflict with existing bookings/unavailability. Choose different dates."); return false; }
+    markInvalid(false); return true;
+  }
+  if (renterStart) renterStart.addEventListener('change', validateRenterDates);
+  if (renterEnd) renterEnd.addEventListener('change', validateRenterDates);
+  if (requestBtn) requestBtn.addEventListener('click', async function(ev){ const ok = await validateRenterDates(); if (!ok) { ev.preventDefault(); return false; } });
+
+  // decorate date inputs
+  function decorateDateInputs() {
+    if (!renterStart && !renterEnd) return;
+    [renterStart, renterEnd].forEach(inp => {
+      if (!inp) return;
+      inp.addEventListener('input', function(){
+        const v = inp.value;
+        if (v && isDateBlocked(v)) inp.setCustomValidity("This date is blocked/booked.");
+        else inp.setCustomValidity("");
+      });
+    });
+  }
+  decorateDateInputs();
+
+  /* --------------------- PAYMENTS: create session, redirect, poll receipt --------------------- */
+
+  const STRIPE_PUBLISHABLE_KEY = "{{ stripe_pk or '' }}";
+
+  function buildCreateSessionUrl(reqId){
+    return `/rental/request/${encodeURIComponent(reqId)}/create_session`;
+  }
+
+  async function pollPaymentStatus(paymentId, opts={intervalMs:2000, maxAttempts:25}) {
+    const statusNode = document.getElementById('paymentStatus');
+    for (let i=0;i<opts.maxAttempts;i++){
+      try {
+        const r = await fetch(`/rental/payment/${paymentId}/status`, { credentials: 'same-origin' });
+        if (r.ok) {
+          const j = await r.json();
+          if (j.ok && j.status) {
+            if (j.status === 'completed' || j.status === 'paid') return { ok:true, status:j.status };
+            if (['failed','refunded','cancelled'].includes(j.status)) return { ok:false, status:j.status };
+            if (statusNode) statusNode.textContent = 'Payment status: ' + j.status + ' (waiting for confirmation...)';
+          }
+        }
+      } catch (e) {
+        console.error("poll error", e);
+      }
+      await new Promise(res=>setTimeout(res, opts.intervalMs));
+    }
+    return { ok:false, error:'timeout' };
+  }
+
+  async function createCheckoutSession(requestId, mode) {
+    const statusNode = document.getElementById('paymentStatus');
+    if (statusNode) statusNode.textContent = 'Initializing payment...';
+    try {
+      const form = new URLSearchParams();
+      form.append('mode', mode);
+
+      const res = await fetch(buildCreateSessionUrl(requestId), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: form.toString()
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>null);
+        const err = txt || `HTTP ${res.status}`;
+        if (statusNode) statusNode.textContent = 'Error initiating payment: ' + err;
+        alert('Payment init failed: ' + err);
+        return;
+      }
+
+      const j = await res.json();
+      if (!j.ok) {
+        if (statusNode) statusNode.textContent = 'Error initiating payment: ' + (j.error || 'unknown');
+        alert('Payment init failed: ' + (j.error || 'unknown'));
+        return;
+      }
+
+      const checkoutUrl = j.checkout_url || j.url || null;
+      const sessionId = j.sessionId || j.session_id || null;
+      const paymentId = j.payment_id || j.paymentId || null;
+
+      if (statusNode) statusNode.textContent = 'Redirecting to payment gateway...';
+
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+        return;
+      }
+
+      if (sessionId && STRIPE_PUBLISHABLE_KEY) {
+        try {
+          const stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
+          const { error } = await stripe.redirectToCheckout({ sessionId });
+          if (error) {
+            console.error("Stripe redirectToCheckout error", error);
+            if (statusNode) statusNode.textContent = "Payment redirect failed: " + (error.message || 'unknown');
+            alert("Payment redirect failed: " + (error.message || 'unknown'));
+          }
+          return;
+        } catch (err) {
+          console.warn("Stripe.js redirect failed; falling back to thankyou", err);
+        }
+      }
+
+      if (paymentId) {
+        window.location.href = `/rental/thankyou?payment_id=${encodeURIComponent(paymentId)}`;
+        return;
+      }
+
+      alert("Payment started but no redirect was provided. Server response: " + JSON.stringify(j));
+    } catch (err) {
+      console.error(err);
+      if (document.getElementById('paymentStatus')) document.getElementById('paymentStatus').textContent = 'Network error creating checkout.';
+      alert('Network error: ' + err);
+    }
+  }
+
+  async function onPageLoadCheckForPayment() {
+    const url = new URL(window.location.href);
+    const pid = url.searchParams.get('payment_id') || url.searchParams.get('paymentId') || null;
+    if (!pid) return;
+    const statusNode = document.getElementById('paymentStatus');
+    if (statusNode) statusNode.textContent = 'Verifying payment, please wait...';
+    const r = await pollPaymentStatus(pid, {intervalMs:2000, maxAttempts:30});
+    if (r.ok) {
+      if (statusNode) statusNode.textContent = 'Payment completed — opening receipt...';
+      window.open(`/rental/payment/${pid}/receipt`, '_blank');
+      setTimeout(()=>{ if (statusNode) statusNode.textContent = 'Payment confirmed.'; }, 1500);
+    } else {
+      if (r.status === 'refunded' || r.status === 'failed' || r.status === 'cancelled') {
+        if (statusNode) statusNode.textContent = 'Payment status: ' + (r.status || r.error);
+        alert('Payment not completed: ' + (r.status || r.error));
+      } else {
+        if (statusNode) statusNode.textContent = 'Payment still pending. You can refresh later to check status.';
+      }
+    }
+  }
+
+  // Wire up pay buttons
+  document.addEventListener('click', (e) => {
+    const payBtn = e.target.closest('#payAdvanceBtn, #payFullBtn');
+    if (!payBtn) return;
+    const reqId = payBtn.dataset.req;
+    const pType = payBtn.dataset.type || (payBtn.id === 'payAdvanceBtn' ? 'advance' : 'full');
+    if (!reqId) return alert('Missing request id for payment.');
+    if (!confirm('Proceed to ' + (pType === 'advance' ? 'Advance' : 'Full') + ' payment?')) return;
+    payBtn.disabled = true;
+    createCheckoutSession(reqId, pType).finally(()=> payBtn.disabled = false);
+  });
+
+  onPageLoadCheckForPayment();
+
+  /* --------------------- GALLERY: thumbnails, set hero, delete --------------------- */
+
+  const mainMedia = document.getElementById('mainMedia');
+  const thumbRail = document.getElementById('thumbRail');
+
+  function setActiveThumb(thumbEl) {
+    document.querySelectorAll('.thumb-item').forEach(t => t.classList.remove('active'));
+    if (thumbEl) thumbEl.classList.add('active');
+  }
+
+  // initialize first active thumb (hero if present)
+  (function initThumbs(){
+    if (!thumbRail) return;
+    const firstThumb = thumbRail.querySelector('.thumb-item');
+    let heroFilename = "{{ rental.hero_filename or '' }}";
+    if (heroFilename && heroFilename !== '') {
+      // find thumb with matching filename
+      const match = Array.from(thumbRail.querySelectorAll('.thumb-item')).find(t => t.dataset.filename === heroFilename);
+      if (match) {
+        // set main src to hero (already set server-side) and mark active
+        setActiveThumb(match);
+        return;
+      }
+    }
+    if (firstThumb) setActiveThumb(firstThumb);
+  })();
+
+  // click -> set main image
+  if (thumbRail) {
+    thumbRail.addEventListener('click', function(e){
+      const thumb = e.target.closest('.thumb-item');
+      if (!thumb) return;
+      const imgSrc = thumb.dataset.filename ? `/static/uploads/${thumb.dataset.filename}` : null;
+      if (imgSrc && mainMedia) mainMedia.src = imgSrc;
+      setActiveThumb(thumb);
+    });
+
+    // keyboard support (Enter/Space)
+    thumbRail.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' || e.key === ' ') {
+        const thumb = e.target.closest('.thumb-item');
+        if (!thumb) return;
+        e.preventDefault();
+        const imgSrc = thumb.dataset.filename ? `/static/uploads/${thumb.dataset.filename}` : null;
+        if (imgSrc && mainMedia) mainMedia.src = imgSrc;
+        setActiveThumb(thumb);
+      }
+    });
+  }
+
+  // Delete image (owner)
+  document.querySelectorAll('.btn-delete-img').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      ev.preventDefault();
+      const id = btn.dataset.imgId;
+      if (!id) return alert('Missing image id');
+      if (!confirm('Delete this image?')) return;
+      try {
+        const resp = await fetch(`/rental/image/${id}/delete`, { method: 'POST', headers: {'X-Requested-With':'XMLHttpRequest'}, credentials:'same-origin' });
+        const j = await resp.json().catch(()=>null);
+        if (resp.ok && j && j.ok) {
+          // remove thumbnail from DOM and update main if needed
+          const thumb = document.querySelector('.thumb-item[data-img-id="'+id+'"]');
+          if (thumb) {
+            // if deleted thumbnail was active, switch to first available
+            const wasActive = thumb.classList.contains('active');
+            thumb.remove();
+            if (wasActive) {
+              const newThumb = document.querySelector('.thumb-item');
+              if (newThumb) {
+                const src = newThumb.dataset.filename ? `/static/uploads/${newThumb.dataset.filename}` : null;
+                if (src && mainMedia) mainMedia.src = src;
+                setActiveThumb(newThumb);
+              } else {
+                // no thumbs remain
+                if (mainMedia) { mainMedia.remove(); const gm = document.getElementById('galleryMain'); gm.innerHTML = '<div style="color:#777">No images available</div>'; }
+              }
+            }
+            alert('Image deleted');
+          }
+        } else {
+          alert('Could not delete image');
+        }
+      } catch (err) {
+        console.error(err); alert('Delete failed');
+      }
+    });
+  });
+
+  // Set hero (owner)
+  document.querySelectorAll('.btn-set-hero').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      ev.preventDefault();
+      const id = btn.dataset.imgId;
+      if (!id) return alert('Missing image id');
+      try {
+        const rid = {{ rental.id }};
+        const resp = await fetch(`/rental/${rid}/media/${id}/hero`, { method: 'POST', headers: {'X-Requested-With':'XMLHttpRequest'}, credentials:'same-origin' });
+        const j = await resp.json().catch(()=>null);
+        if (resp.ok && j && j.ok) {
+          // reload (server persists hero); quick UX: mark active
+          const thumb = document.querySelector('.thumb-item[data-img-id="'+id+'"]');
+          if (thumb) setActiveThumb(thumb);
+          // update main image src from returned hero if present
+          if (j.hero && mainMedia) mainMedia.src = `/static/uploads/${j.hero}`;
+          alert('Hero image set');
+        } else {
+          alert('Failed to set hero image');
+        }
+      } catch (err) {
+        console.error(err); alert('Set hero failed');
+      }
+    });
+  });
+
+});
+</script>
+{% endblock %}

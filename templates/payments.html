@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Payments — KrishiNet{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="fa-solid fa-house"></i> Back to Dashboard
+  </a>
+</div>
+
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Payments Overview</h4>
+    <div class="small text-muted">Your earnings (as owner) & your expenses (as renter)</div>
+  </div>
+
+  <ul class="nav nav-tabs mb-3" id="paymentsTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="earned-tab" data-bs-toggle="tab" data-bs-target="#earned" type="button" role="tab">
+        <i class="fa-solid fa-hand-holding-dollar me-1"></i>
+        Earned <span class="badge bg-light text-dark ms-1">₹{{ total_earned or 0 }}</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="paid-tab" data-bs-toggle="tab" data-bs-target="#paid" type="button" role="tab">
+        <i class="fa-solid fa-money-bill-transfer me-1"></i>
+        Paid <span class="badge bg-light text-dark ms-1">₹{{ total_paid or 0 }}</span>
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <!-- 🟢 Owner Earnings -->
+    <div class="tab-pane fade show active" id="earned" role="tabpanel">
+      <ul class="list-group shadow-sm mb-3">
+        {% for e in earned %}
+          <li class="list-group-item d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-bold">
+                ₹{{ e.amount }} — {{ e.rental_title or 'Rental' }}
+                {% if e.status == 'refunded' %}
+                  <span class="badge bg-danger ms-2">Refunded</span>
+                {% elif e.status == 'completed' %}
+                  <span class="badge bg-success ms-2">Completed</span>
+                {% else %}
+                  <span class="badge bg-secondary ms-2">{{ e.status or 'Pending' }}</span>
+                {% endif %}
+              </div>
+              <div class="small text-muted">
+                {{ e.start_date or '—' }} → {{ e.end_date or '—' }}
+                {% if e.request_id %} • Request #{{ e.request_id }}{% endif %}
+              </div>
+              <div class="small text-muted">
+                Payer: {{ e.payer_name or '—' }} • Method: {{ e.method or '—' }} • Mode: {{ e.mode or '—' }}
+              </div>
+            </div>
+
+            <div class="text-end">
+              {% if e.status == 'completed' %}
+                <a class="btn btn-sm btn-outline-secondary mb-1" target="_blank"
+                   href="{{ url_for('payments.payment_receipt', payment_id=e.id) }}">
+                   <i class="fa-regular fa-file-lines"></i> View
+                </a>
+                <a class="btn btn-sm btn-outline-primary mb-1" target="_blank"
+                   href="{{ url_for('payments.payment_receipt', payment_id=e.id, format='pdf') }}">
+                   <i class="fa-solid fa-download"></i> PDF
+                </a>
+                <button class="btn btn-sm btn-outline-danger refund-btn mb-1" data-payment-id="{{ e.id }}">
+                  <i class="fa-solid fa-rotate-left"></i> Refund
+                </button>
+              {% else %}
+                <span class="text-muted small">{{ e.status|capitalize }}</span>
+              {% endif %}
+            </div>
+          </li>
+        {% else %}
+          <li class="list-group-item text-muted text-center py-3">No earnings yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <!-- 🟣 Renter Payments -->
+    <div class="tab-pane fade" id="paid" role="tabpanel">
+      <ul class="list-group shadow-sm">
+        {% for p in paid %}
+          <li class="list-group-item d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-bold">
+                ₹{{ p.amount }} — {{ p.rental_title or 'Rental' }}
+                {% if p.status == 'refunded' %}
+                  <span class="badge bg-danger ms-2">Refunded</span>
+                {% elif p.status == 'completed' %}
+                  <span class="badge bg-success ms-2">Completed</span>
+                {% else %}
+                  <span class="badge bg-secondary ms-2">{{ p.status or 'Pending' }}</span>
+                {% endif %}
+              </div>
+              <div class="small text-muted">
+                {{ p.start_date or '—' }} → {{ p.end_date or '—' }}
+                {% if p.request_id %} • Request #{{ p.request_id }}{% endif %}
+              </div>
+              <div class="small text-muted">
+                Owner: {{ p.owner_name or '—' }} • Method: {{ p.method or '—' }} • Mode: {{ p.mode or '—' }}
+              </div>
+            </div>
+
+            <div class="text-end">
+              {% if p.status == 'completed' %}
+                <a class="btn btn-sm btn-outline-secondary mb-1" target="_blank"
+                   href="{{ url_for('payments.payment_receipt', payment_id=p.id) }}">
+                   <i class="fa-regular fa-file-lines"></i> View
+                </a>
+                <a class="btn btn-sm btn-outline-primary mb-1" target="_blank"
+                   href="{{ url_for('payments.payment_receipt', payment_id=p.id, format='pdf') }}">
+                   <i class="fa-solid fa-download"></i> PDF
+                </a>
+              {% else %}
+                <span class="text-muted small">{{ p.status|capitalize }}</span>
+              {% endif %}
+            </div>
+          </li>
+        {% else %}
+          <li class="list-group-item text-muted text-center py-3">No payments made yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Refund Handling (Owner Only) */
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.refund-btn');
+  if (!btn) return;
+  const pid = btn.dataset.paymentId;
+  if (!pid) return;
+  if (!confirm('Issue refund for payment #' + pid + '?')) return;
+
+  btn.disabled = true;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
+
+  try {
+    const res = await fetch(`/rental/payment/${pid}/refund`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const j = await res.json();
+    if (j.ok) {
+      alert('Refund successful.');
+      location.reload();
+    } else {
+      alert('Refund failed: ' + (j.error || 'unknown'));
+    }
+  } catch (err) {
+    alert('Network error: ' + err);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+</script>
+{% endblock %}

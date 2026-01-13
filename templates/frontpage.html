@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KrishiNet - Agriculture E-Commerce Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="static/frontpage.css">
+    <style>
+      /* Strip container */
+      .krishi-scroll{
+        background: linear-gradient(90deg, #f5f7f5, #eef5ee);
+        border-bottom: 2px solid #e5e7eb;
+        padding: 10px 0;
+        position: relative;
+      }
+
+      /* Horizontal strip with scrollbar */
+      #ksStrip{
+  display: flex;
+  gap: 1.25rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  scroll-behavior: auto;     /* was: smooth → let the rAF scroll run freely */
+  scroll-snap-type: none;    /* was: x proximity → don't fight the marquee */
+  scrollbar-color: #3a8f4d #e9f2ea;
+  scrollbar-width: thin;
+}
+
+      /* WebKit scrollbar styling */
+      #ksStrip::-webkit-scrollbar{ height: 10px; }
+      #ksStrip::-webkit-scrollbar-track{
+        background: #e9f2ea; border-radius: 999px;
+      }
+      #ksStrip::-webkit-scrollbar-thumb{
+        background: #3a8f4d; border-radius: 999px; border: 2px solid #e9f2ea;
+      }
+      #ksStrip::-webkit-scrollbar-thumb:hover{ background: #2e7d32; }
+
+      /* Images + hover zoom */
+      .ks-img{
+  height:160px; width:280px;
+  object-fit:cover; border-radius:14px;
+  box-shadow:0 8px 20px rgba(0,0,0,.18);
+  flex:0 0 auto;
+  scroll-snap-align: unset;  /* <- disable snapping per item */
+  transition: transform .35s ease, box-shadow .35s ease, filter .35s ease;
+  cursor:pointer; filter:saturate(1.05) contrast(1.02);
+}
+      .ks-img:hover{
+        transform: scale(1.08);
+        box-shadow:0 14px 28px rgba(0,0,0,.25);
+        filter:saturate(1.1) contrast(1.05);
+      }
+
+      /* Scroll controls */
+      .scroll-controls {
+        position: absolute;
+        top: 50%;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        padding: 0 10px;
+        transform: translateY(-50%);
+        pointer-events: none;
+        z-index: 10;
+      }
+      
+      .scroll-btn {
+        background-color: rgba(255, 255, 255, 0.8);
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        pointer-events: all;
+        transition: all 0.3s ease;
+      }
+      
+      .scroll-btn:hover {
+        background-color: white;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      }
+      
+      .scroll-btn i {
+        color: #3a8f4d;
+        font-size: 18px;
+      }
+      
+      .play-pause-btn {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        background-color: rgba(255, 255, 255, 0.8);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 10;
+        transition: all 0.3s ease;
+      }
+      
+      .play-pause-btn:hover {
+        background-color: white;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      }
+      
+      .play-pause-btn i {
+        color: #3a8f4d;
+        font-size: 16px;
+      }
+
+      /* Mobile */
+      @media (max-width: 768px){
+        .ks-img{ height:120px; width:200px; }
+        .scroll-btn {
+          width: 32px;
+          height: 32px;
+        }
+        .scroll-btn i {
+          font-size: 14px;
+        }
+        .play-pause-btn {
+          width: 30px;
+          height: 30px;
+          bottom: 5px;
+          right: 5px;
+        }
+        .play-pause-btn i {
+          font-size: 14px;
+        }
+      }
+/* Continuous marquee (CSS-only) */
+.krishi-marquee{
+  background: linear-gradient(90deg, #f5f7f5, #eef5ee);
+  border-bottom: 2px solid #e5e7eb;
+  padding: 10px 0;
+  overflow: hidden;               /* hide overflow for continuous flow */
+}
+
+.km-track{
+  display: inline-flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.75rem 1rem;
+  will-change: transform;
+  animation: km-scroll 35s linear infinite; /* speed: lower = faster */
+}
+
+.krishi-marquee img{
+  height:160px; width:280px;      /* medium size */
+  object-fit:cover; border-radius:14px;
+  box-shadow:0 8px 20px rgba(0,0,0,.18);
+  flex:0 0 auto;
+  transition: transform .35s ease, box-shadow .35s ease, filter .35s ease;
+  filter:saturate(1.05) contrast(1.02);
+  cursor:pointer;
+}
+.krishi-marquee img:hover{
+  transform: scale(1.08);
+  box-shadow:0 14px 28px rgba(0,0,0,.25);
+  filter:saturate(1.1) contrast(1.05);
+}
+
+/* Smaller on mobile */
+@media (max-width: 768px){
+  .krishi-marquee img{ height:120px; width:200px; }
+  .km-track{ animation-duration: 45s; } /* slow down on small screens */
+}
+
+/* Move left from 0 to -50% because we duplicated the set */
+@keyframes km-scroll{
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* New styles for government resources table */
+        .govt-resources {
+            background-color: #f8f9fa;
+            padding: 60px 0;
+        }
+        
+        .resource-table {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+        
+        .resource-table thead {
+            background-color: #2E7D32;
+            color: white;
+        }
+        
+        .resource-table th {
+            padding: 15px;
+            font-weight: 600;
+        }
+        
+        .resource-table td {
+            padding: 15px;
+            vertical-align: top;
+        }
+        
+        .resource-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .resource-table tr:hover {
+            background-color: #e8f5e9;
+        }
+        
+        .visit-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+        
+        .visit-btn:hover {
+            background-color: #3d8b40;
+            color: white;
+        }
+        
+        @media (max-width: 768px) {
+            .resource-table {
+                display: block;
+                overflow-x: auto;
+            }
+        }
+
+        /* ===== Agri Headlines: Theme ===== */
+:root{
+  --agri-bg: #f5f9f5;          /* field mist */
+  --agri-card: #ffffff;        /* white */
+  --agri-ink: #1b3a2a;         /* deep leaf text */
+  --agri-muted: #6b7d6f;       /* muted */
+  --agri-line: #e3eee3;        /* soft border */
+  --agri-primary: #2e7d32;     /* deep green */
+  --agri-primary-2: #3fa34d;   /* sprout green */
+  --agri-accent: #b6e388;      /* tender leaf */
+  --agri-chips: #eef7ea;       /* chip bg */
+  --agri-cream: #fffdf6;       /* soft cream */
+}
+
+/* Section shell */
+#agri-news{
+  background: linear-gradient(180deg, var(--agri-cream), var(--agri-bg));
+  border-top: 1px solid var(--agri-line);
+  border-bottom: 1px solid var(--agri-line);
+}
+
+/* Heading row */
+.agri-head{
+  display:flex; gap:1rem; flex-wrap:wrap;
+  align-items:center; justify-content:space-between;
+}
+.agri-title{
+  display:flex; align-items:center; gap:.6rem; margin:0;
+  font-weight:700; color:var(--agri-ink);
+}
+.agri-title .leaf-dot{
+  width:12px; height:12px; border-radius:50%;
+  background: radial-gradient(circle at 30% 30%, var(--agri-accent), var(--agri-primary));
+  box-shadow:0 0 0 6px rgba(63,163,77,.12);
+}
+
+/* Lang picker */
+.agri-controls{
+  display:flex; align-items:center; gap:.6rem;
+}
+.agri-controls label{ color:var(--agri-muted); }
+#newsLang{
+  min-width:160px; border-color:var(--agri-line); color:var(--agri-ink);
+}
+#newsLang:focus{ box-shadow:0 0 0 .25rem rgba(63,163,77,.15); border-color:var(--agri-primary-2); }
+
+/* Ticker */
+.news-ticker-wrap{
+  position:relative; overflow:hidden; border-radius:14px;
+  background: linear-gradient(90deg,#eaf5e8,#f0faf0);
+  border:1px solid var(--agri-line);
+}
+.news-ticker{
+  display:inline-block; white-space:nowrap; padding:12px 14px;
+  animation: ticker-move 38s linear infinite;
+}
+@keyframes ticker-move{ 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+
+.news-pill{
+  display:inline-flex; align-items:center; gap:.5rem; margin:0 10px;
+  background:#fff; border:1px solid var(--agri-line); border-radius:999px;
+  padding:6px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.06);
+  transition: transform .18s ease, box-shadow .18s ease;
+  text-decoration:none; color:var(--agri-ink);
+}
+.news-pill:hover{ transform:translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+.news-pill .dot{
+  width:8px; height:8px; border-radius:50%; background:var(--agri-primary-2);
+}
+.news-pill small{ color:var(--agri-muted); }
+
+/* Grid of cards */
+#newsList .card.news-card{
+  border:1px solid var(--agri-line);
+  background: var(--agri-card);
+  border-radius:16px;
+  box-shadow: 0 10px 24px rgba(46,125,50,.06);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+#newsList .card.news-card:hover{
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px rgba(46,125,50,.10);
+  border-color: rgba(63,163,77,.35);
+}
+.news-card .source{
+  display:inline-flex; align-items:center; gap:.4rem;
+  font-size:.82rem; color:var(--agri-muted);
+  background: var(--agri-chips);
+  border:1px solid var(--agri-line);
+  padding:4px 10px; border-radius:999px;
+}
+.news-card .date{
+  font-size:.82rem; color:var(--agri-muted);
+}
+.news-card .card-title{
+  color:var(--agri-ink); line-height:1.35; margin:.4rem 0 .5rem;
+}
+
+/* “Read” button */
+.btn-outline-primary{
+  --bs-btn-color: var(--agri-primary);
+  --bs-btn-border-color: var(--agri-primary);
+  --bs-btn-hover-bg: var(--agri-primary);
+  --bs-btn-hover-border-color: var(--agri-primary);
+}
+
+/* Skeleton while loading (optional) */
+.skel{
+  background: linear-gradient(90deg,#eef5ee 25%, #f6fbf6 37%, #eef5ee 63%);
+  background-size:400% 100%;
+  animation: shimmer 1.2s infinite;
+  border-radius:10px; height:14px;
+}
+@keyframes shimmer{ 0%{background-position:100% 0} 100%{background-position:0 0} }
+.skel.h24{ height:24px; } .skel.w70{ width:70% } .skel.w40{ width:40% } .skel.w90{ width:90% }
+/* Compact news section */
+#agri-news { padding-top: 12px; padding-bottom: 18px; }
+#agri-news .row { row-gap: 12px; }
+#agri-news .news-card { border-radius: 12px !important; }
+#agri-news .news-card .card-body { padding: 12px 14px !important; }
+#agri-news .news-card .source { font-size: .78rem; padding: 2px 8px; }
+#agri-news .news-card .card-title { margin: .25rem 0 .2rem; font-size: 1rem; line-height: 1.25; }
+#agri-news .news-card .date { font-size: .75rem; }
+#agri-news .news-pill { padding: 4px 10px; font-size: .9rem; }
+#agri-news .news-ticker { padding: 8px 10px; }
+
+/* Title clamp to 2 lines */
+.line-2{
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+        :root {
+            --primary-green: #2E7D32;
+            --light-green: #4CAF50;
+            --lighter-green: #E8F5E9;
+            --dark-green: #1B5E20;
+            --price-up: #28a745;
+            --price-down: #dc3545;
+            --price-neutral: #6c757d;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .market-prices-compact {
+            padding: 40px 0;
+            background-color: white;
+        }
+        
+        .market-prices-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            color: var(--dark-green);
+            font-weight: 700;
+            margin-bottom: 0;
+        }
+        
+        .refresh-btn {
+            background-color: var(--light-green);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+        }
+        
+        .refresh-btn:hover {
+            background-color: var(--dark-green);
+        }
+        
+        .refreshing {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .last-updated {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        
+        .price-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .price-table th {
+            background-color: var(--primary-green);
+            color: white;
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .price-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eaeaea;
+        }
+        
+        .price-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .price-table tr:hover {
+            background-color: #f5f9f5;
+        }
+        
+        .commodity-name {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .market-name {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        
+        .current-price {
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .price-change {
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            font-size: 0.85rem;
+        }
+        
+        .price-up {
+            background-color: rgba(40, 167, 69, 0.15);
+            color: var(--price-up);
+        }
+        
+        .price-down {
+            background-color: rgba(220, 53, 69, 0.15);
+            color: var(--price-down);
+        }
+        
+        .price-neutral {
+            background-color: rgba(108, 117, 125, 0.15);
+            color: var(--price-neutral);
+        }
+        
+        .view-more {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .price-table {
+                display: block;
+                overflow-x: auto;
+            }
+            
+            .price-table th, 
+            .price-table td {
+                padding: 10px 8px;
+                font-size: 0.85rem;
+            }
+            
+            .market-prices-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+        }
+
+        /* === Krishi News: font + slower motion (overrides) === */
+
+/* Speeds (bigger = slower) */
+:root{
+  --ticker-speed: 60s;             /* was ~38s */ 
+  --ticker-speed-mobile: 80s;      /* was 38→45s on small screens */
+  --marquee-speed: 70s;            /* was 35s */
+  --marquee-speed-mobile: 90s;     /* was 45s */
+}
+
+/* Headline + titles use the same site font & weight */
+#agri-news h2{
+  font-family: 'Poppins', sans-serif;  /* same as site */
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: var(--agri-ink);
+  margin-bottom: .5rem;
+}
+
+/* Make ticker pills & card titles inherit that clean look */
+.news-pill strong,
+#newsList .news-card .card-title{
+  font-family: inherit;   /* Poppins */
+  font-weight: 600;
+}
+
+/* Slow the ticker */
+.news-ticker{
+  animation-duration: var(--ticker-speed) !important;
+}
+@media (max-width: 768px){
+  .news-ticker{
+    animation-duration: var(--ticker-speed-mobile) !important;
+  }
+}
+
+/* Slow the continuous image marquee */
+.km-track{
+  animation-duration: var(--marquee-speed) !important;
+}
+@media (max-width: 768px){
+  .km-track{
+    animation-duration: var(--marquee-speed-mobile) !important;
+  }
+}
+/* Slow down continuous ticker headlines */
+.news-ticker {
+  animation-duration: 70s !important;   /* was 38s, now slower */
+}
+
+@media (max-width: 768px){
+  .news-ticker {
+    animation-duration: 90s !important; /* even slower on mobile */
+  }
+}
+/* === Slow continuous Krishi News headline ticker === */
+.news-ticker {
+  animation: ticker-move 120s linear infinite !important;  /* slower crawl */
+}
+
+@media (max-width: 768px){
+  .news-ticker {
+    animation: ticker-move 150s linear infinite !important; /* slower on mobile */
+  }
+}
+
+/* hide extra market rows until expanded */
+.hidden-row { display: none; }
+
+<style>
+  .feature-icon{
+    width:48px;height:48px;border-radius:12px;
+    background:linear-gradient(135deg,#ecf8ed,#dbeedd);
+    display:flex;align-items:center;justify-content:center;
+    color:#1b5e20;font-size:1.1rem
+  }
+  .section-title{margin:0;font-size:1.06rem;color:#1b5e20;font-weight:700}
+</style>
+
+
+
+
+</style>
+    </head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-leaf me-2"></i>KrishiNet
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">Home</a>
+                    </li>
+                    <li class="nav-item">
+  <a class="nav-link" href="/news">News</a>
+</li>
+  <li class="nav-item">
+    <a class="nav-link" href="/subsidies">Loans & Subsidies</a>
+</li>
+<li class="nav-item">
+  <a class="nav-link" href="{{ url_for('videos_public') }}">Grow Log</a>
+</li>
+      <!-- JavaScript will load a few latest videos -->
+    </div>
+  </div>
+</section>
+</ul><div class="d-flex align-items-center">
+                    <a href="/login" class="btn btn-outline-primary me-2">Login</a>
+                    <a href="/registration" class="btn btn-primary">Register</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container">
+            <h1 class="display-4 fw-bold mb-4">Empowering Farmers, Enriching Agriculture</h1>
+            <p class="lead mb-5">India's premier platform for farmers to connect, trade, and grow together</p>
+            <div class="row g-3 justify-content-center">
+                <div class="col-md-8">
+                    <div class="input-group">
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="krishi-marquee">
+  <div class="km-track">
+    <!-- one set -->
+    <img src="/static/soil.jpeg"  alt="Soil">
+    <img src="/static/jower.jpeg" alt="Jowar field">
+    <img src="/static/cotton.jpeg" alt="Cotton">
+    <img src="/static/wheat.png"  alt="Wheat">
+    <img src="/static/rice.png"   alt="Rice">
+    <img src="/static/sugarcane.png" alt="Sugarcane">
+    <img src="/static/corn.png"   alt="Corn">
+    <img src="/static/croprows.png"  alt="Crop rows">
+    <img src="/static/irrigation.png" alt="Irrigation">
+    <img src="/static/sugcultivating.png" alt="Sugarcane Cultivating">
+    <img src="/static/man.png"    alt="Cultivating">
+    <img src="/static/tractor.png" alt="Tractor cultivating">
+    <img src="/static/crop.png"   alt="Crop">
+
+    <!-- the same set again for seamless loop -->
+    <img src="/static/soil.jpeg"  alt="Soil">
+    <img src="/static/jower.jpeg" alt="Jowar field">
+    <img src="/static/cotton.jpeg" alt="Cotton">
+    <img src="/static/wheat.png"  alt="Wheat">
+    <img src="/static/rice.png"   alt="Rice">
+    <img src="/static/sugarcane.png" alt="Sugarcane">
+    <img src="/static/corn.png"   alt="Corn">
+    <img src="/static/croprows.png"  alt="Crop rows">
+    <img src="/static/irrigation.png" alt="Irrigation">
+    <img src="/static/sugcultivating.png" alt="Sugarcane Cultivating">
+    <img src="/static/man.png"    alt="Cultivating">
+    <img src="/static/tractor.png" alt="Tractor cultivating">
+    <img src="/static/crop.png"   alt="Crop">
+  </div>
+</section>
+
+    <section class="market-prices-compact">
+        <div class="container">
+            <div class="market-prices-header">
+                <h2 class="section-title">Live Market Prices</h2>
+                <div class="d-flex align-items-center">
+                    <span class="last-updated me-3" id="lastUpdated">Updated: Just now</span>
+                    <button class="refresh-btn" id="refreshPrices">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-end gap-2 mb-2">
+  <div>
+    <label class="form-label mb-1">Commodity</label>
+    <input id="qCommodity" class="form-control form-control-sm" placeholder="e.g., Tomato, Onion">
+  </div>
+  <div>
+    <label class="form-label mb-1">State</label>
+    <input id="qState" class="form-control form-control-sm" placeholder="e.g., Karnataka">
+  </div>
+  <div>
+    <label class="form-label mb-1">Date</label>
+    <input id="qDate" type="date" class="form-control form-control-sm">
+  </div>
+  <div class="btn-group" role="group" aria-label="Unit">
+    <button class="btn btn-outline-secondary btn-sm" id="unitQ">₹/Quintal</button>
+    <button class="btn btn-outline-secondary btn-sm" id="unitKg">₹/kg</button>
+  </div>
+  <button id="applyFilters" class="btn btn-primary btn-sm">
+    <i class="fas fa-filter me-1"></i> Apply
+  </button>
+  <a id="openAgmark" class="btn btn-outline-success btn-sm"
+     href="https://agmarknet.gov.in/PriceAndArrivals/CommodityDailyStateWise.aspx"
+     target="_blank" rel="noopener">Open on Agmarknet</a>
+</div>
+
+            
+            <table class="price-table">
+                <thead>
+  <tr>
+    <th>Commodity</th>
+    <th>Market</th>
+    <th>Price (₹/Quintal)</th>
+    <th>Date (Agmarknet)</th>  <!-- ← rename -->
+  </tr>
+</thead>
+                <tbody id="pricesTableBody">
+                    <!-- Prices will be populated by JavaScript -->
+                </tbody>
+            </table>
+            
+<div class="view-more">
+  <button id="toggleMore" class="btn btn-outline-primary btn-sm">View More Commodities</button>
+</div>
+
+        </div>
+    </section>
+
+
+
+<!-- Government Agricultural Resources Section -->
+    <section class="govt-resources">
+        <div class="container">
+            <h2 class="section-title text-center">Government Agricultural Resources</h2>
+            <p class="text-center text-muted mb-5">Access official government portals and schemes for farmers</p>
+            
+            <div class="resource-table">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Website Name</th>
+                            <th>Description</th>
+                            <th>Link</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>PM Kisan Samman Nidhi</td>
+                            <td>Central government scheme for financial assistance to farmers</td>
+                            <td><a href="https://pmkisan.gov.in" target="_blank" class="visit-btn">Visit</a></td>
+                        </tr>
+                        <tr>
+                            <td>Soil Health Card Scheme</td>
+                            <td>Government scheme to issue soil health cards to farmers</td>
+                            <td><a href="https://soilhealth.dac.gov.in" target="_blank" class="visit-btn">Visit</a></td>
+                        </tr>
+            
+                        <tr>
+                            <td>Agricultural & Processed Food Products Export Development Authority (APEDA)</td>
+                            <td>Authority for development and promotion of export of agricultural products</td>
+                            <td><a href="https://apeda.gov.in" target="_blank" class="visit-btn">Visit</a></td>
+                        </tr>
+                        <tr>
+                            <td>National Food Security Mission</td>
+                            <td>Government mission to increase production of rice, wheat, pulses, and other crops</td>
+                            <td><a href="https://nfsm.gov.in" target="_blank" class="visit-btn">Visit</a></td>
+                        </tr>
+                        <tr>
+                            <td>Pradhan Mantri Fasal Bima Yojana (PMFBY)</td>
+                            <td>Government crop insurance scheme for farmers</td>
+                            <td><a href="https://pmfby.gov.in" target="_blank" class="visit-btn">Visit</a></td>
+                        </tr>
+                        <tr>
+                            <td>Indian Council of Agricultural Research (ICAR)</td>
+                            <td>Premier research institution for agricultural education and research in India</td>
+                            <td><a href="https://www.icar.org.in" target="_blank" class="visit-btn">Visit</a></td>
+                        </tr>
+                        <tr>
+                            <td>National Bank for Agriculture and Rural Development (NABARD)</td>
+                            <td>Development bank focused on rural development and agricultural financing</td>
+                            <td><a href="https://www.nabard.org" target="_blank" class="visit-btn">Visit</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Features Section -->
+    <section class="py-5">
+    <div class="container">
+        <h2 class="section-title">Our Services</h2>
+        <p class="text-center text-muted mb-5">Comprehensive solutions for modern farming needs</p>
+        <div class="row g-4">
+            <div class="col-md-3">
+                <div class="card feature-card">
+                    <div class="card-body text-center p-4">
+                        <div class="feature-icon">
+                            <i class="fas fa-seedling"></i>
+                        </div>
+                        <h5>Crop Trading</h5>
+                        <p class="text-muted">Buy and sell crops directly with farmers across the country</p>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card feature-card">
+                    <div class="card-body text-center p-4">
+                        <div class="feature-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h5>Live Market Prices</h5>
+                        <p class="text-muted">Real-time commodity prices and market trends</p>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card feature-card">
+                    <div class="card-body text-center p-4">
+                        <div class="feature-icon">
+                            <i class="fas fa-newspaper"></i>
+                        </div>
+                        <h5>News, Loans & Subsidies</h5>
+                        <p class="text-muted">Stay updated on government schemes, latest agri news, and farmer loans</p>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card feature-card">
+                    <div class="card-body text-center p-4">
+                        <div class="feature-icon">
+                            <i class="fas fa-tractor"></i>
+                        </div>
+                        <h5>Equipment Rental</h5>
+                        <p class="text-muted">Rent farm equipment at affordable rates</p>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+  
+    
+    <!-- Categories Section -->
+    <section class="py-5">
+  <div class="container">
+    <h2 class="section-title text-center">Shop by Category</h2>
+    <p class="text-center text-muted mb-5">
+      Find everything you need for your farming activities
+    </p>
+    <div class="row g-4">
+      <!-- Seeds -->
+      <div class="col-md-3">
+        <div class="category-card shadow-sm rounded-4 overflow-hidden">
+          <div class="category-img">
+            <img src="/static/seeds.jpg"
+              alt="Seeds"
+              class="img-fluid w-100"
+            />
+          </div>
+          <div class="card-body text-center p-3">
+            <h5 class="fw-bold mt-2">Seeds</h5>
+            <p class="text-muted">High quality seeds for all crops</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fertilizers -->
+      <div class="col-md-3">
+        <div class="category-card shadow-sm rounded-4 overflow-hidden">
+          <div class="category-img">
+            <img
+              src="/static/fertilizer.jpg"
+              alt="Fertilizers"
+              class="img-fluid w-100"
+            />
+          </div>
+          <div class="card-body text-center p-3">
+            <h5 class="fw-bold mt-2">Fertilizers</h5>
+            <p class="text-muted">Organic and chemical fertilizers</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tools & Equipment -->
+      <div class="col-md-3">
+        <div class="category-card shadow-sm rounded-4 overflow-hidden">
+          <div class="category-img">
+            <img
+              src="/static/equipment.jpeg"
+              alt="Tools & Equipment"
+              class="img-fluid w-100"
+            />
+          </div>
+          <div class="card-body text-center p-3">
+            <h5 class="fw-bold mt-2">Tools & Equipment</h5>
+            <p class="text-muted">Farming tools and machinery</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Irrigation -->
+      <div class="col-md-3">
+        <div class="category-card shadow-sm rounded-4 overflow-hidden">
+          <div class="category-img">
+            <img
+              src="/static/irrigationpumps.jpeg"
+              alt="Irrigation"
+              class="img-fluid w-100"
+            />
+          </div>
+          <div class="card-body text-center p-3">
+            <h5 class="fw-bold mt-2">Irrigation</h5>
+            <p class="text-muted">Water pumps and irrigation systems</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+    <!-- Stats Section -->
+    <section class="py-5 bg-light">
+        <div class="container">
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <p class="stats-number">50,000+</p>
+                    <p class="stats-text">Active Farmers</p>
+                </div>
+                <div class="col-md-3">
+                    <p class="stats-number">120+</p>
+                    <p class="stats-text">Crop Varieties</p>
+                </div>
+                <div class="col-md-3">
+                    <p class="stats-number">25,000+</p>
+                    <p class="stats-text">Transactions</p>
+                </div>
+                <div class="col-md-3">
+                    <p class="stats-number">15+</p>
+                    <p class="stats-text">States Covered</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- Footer -->
+    <footer style="background-color:#1f2f3a; color:#e4e4e4; font-family:'Poppins',sans-serif; padding-top:40px; padding-bottom:28px;">
+  <div class="container">
+    <div class="row gy-4">
+
+      <!-- About Section -->
+      <div class="col-md-5">
+        <h5 class="text-white mb-4"><i class="fas fa-leaf me-2"></i>KrishiNet</h5>
+        <p style="font-size:0.95rem; color:#d7d7d7; max-width:520px;">
+          Empowering farmers with technology-driven solutions for better agricultural outcomes, real-time market access,
+          and sustainable profitability. KrishiNet brings together data, trade, and digital tools to help every farmer grow smarter.
+        </p>
+        <div style="margin-top:12px;">
+          <a href="#" style="color:#fff; font-size:0.9rem; margin-right:10px; display:inline-block; width:32px; height:32px; border:1px solid #2e7d32; border-radius:50%; line-height:30px; text-align:center; transition:all 0.3s;">
+            <i class="fab fa-facebook-f"></i>
+          </a>
+          <a href="#" style="color:#fff; font-size:0.9rem; margin-right:10px; display:inline-block; width:32px; height:32px; border:1px solid #2e7d32; border-radius:50%; line-height:30px; text-align:center; transition:all 0.3s;">
+            <i class="fab fa-twitter"></i>
+          </a>
+          <a href="#" style="color:#fff; font-size:0.9rem; margin-right:10px; display:inline-block; width:32px; height:32px; border:1px solid #2e7d32; border-radius:50%; line-height:30px; text-align:center; transition:all 0.3s;">
+            <i class="fab fa-instagram"></i>
+          </a>
+          <a href="#" style="color:#fff; font-size:0.9rem; margin-right:10px; display:inline-block; width:32px; height:32px; border:1px solid #2e7d32; border-radius:50%; line-height:30px; text-align:center; transition:all 0.3s;">
+            <i class="fab fa-youtube"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- Our Services -->
+      <div class="col-md-3">
+        <h6 class="mb-3" style="color:#fff;">Our Services</h6>
+        <ul style="list-style:none; padding:0; margin:0;">
+          <li style="margin-bottom:6px;"><a href="#" style="color:#cde9cc; text-decoration:none;">Crop Trading</a></li>
+          <li style="margin-bottom:6px;"><a href="#" style="color:#cde9cc; text-decoration:none;">Market Analytics</a></li>
+          <li style="margin-bottom:6px;"><a href="#" style="color:#cde9cc; text-decoration:none;">Live Market Prices</a></li>
+          <li style="margin-bottom:6px;"><a href="#" style="color:#cde9cc; text-decoration:none;">Equipment Rental</a></li>
+          <li style="margin-bottom:6px;"><a href="#" style="color:#cde9cc; text-decoration:none;">Growlogs</a></li>
+        </ul>
+      </div>
+
+      <!-- Contact -->
+      <div class="col-md-4">
+        <h6 class="mb-3" style="color:#fff;">Contact Us</h6>
+        <p style="font-size:0.9rem; margin-bottom:4px;"><i class="fas fa-map-marker-alt me-2"></i>123 Agriculture Road, Farm District, India</p>
+        <p style="font-size:0.9rem; margin-bottom:4px;"><i class="fas fa-phone me-2"></i>+91 98765 43210</p>
+        <p style="font-size:0.9rem; margin-bottom:12px;"><i class="fas fa-envelope me-2"></i>info@krishinet.com</p>
+
+        <div class="input-group" style="max-width:280px;">
+          <input type="email" class="form-control form-control-sm" placeholder="Your Email" style="border-radius:6px 0 0 6px; border:none;">
+          <button class="btn btn-success btn-sm" style="border-radius:0 6px 6px 0;">Subscribe</button>
+        </div>
+      </div>
+    </div>
+
+    <hr style="margin:24px 0; border-color:#444;">
+    <div class="d-flex flex-wrap justify-content-between align-items-center">
+      <p class="mb-0">© 2025 KrishiNet. All rights reserved.</p>
+      <div>
+        <a href="#" class="text-light me-3" style="font-size:0.9rem; text-decoration:none;" data-doc="privacy">Privacy Policy</a>
+        <a href="#" class="text-light me-3" style="font-size:0.9rem; text-decoration:none;" data-doc="terms">Terms of Service</a>
+        
+      </div>
+    </div>
+  </div>
+</footer>
+
+    <!-- Policy Modal (single reusable popup) -->
+<div class="modal fade" id="docModal" tabindex="-1" aria-labelledby="docModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="docModalLabel">Document</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="docModalBody" style="max-height:65vh; overflow:auto;">
+        <!-- Content injected here -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Inline policy/about documents
+  const SITE_DOCS = {
+    privacy: {
+      title: "Privacy Policy",
+      html: `
+        <p>At <strong>KrishiNet</strong>, we value your privacy. This Privacy Policy explains how we collect, use, and protect your personal information when you use our platform.</p>
+        <h6>Information We Collect</h6>
+        <p>We may collect your name, contact information, and usage data to improve our services.</p>
+        <h6>How We Use Information</h6>
+        <p>Your information is used to provide better recommendations and personalized services.</p>
+        <h6>Data Protection</h6>
+        <p>We use secure protocols and systems to protect your data from unauthorized access.</p>
+      `
+    },
+    terms: {
+      title: "Terms of Service",
+      html: `
+        <p>Welcome to <strong>KrishiNet</strong>. By using our platform, you agree to comply with the following terms.</p>
+        <h6>Use of Platform</h6>
+        <p>Users must not misuse KrishiNet’s data or services.</p>
+        <h6>Ownership</h6>
+        <p>All content, data, and visuals are owned by KrishiNet.</p>
+        <h6>Termination</h6>
+        <p>We may suspend accounts violating our policies.</p>
+      `
+    },
+    about: {
+      title: "About KrishiNet",
+      html: `
+        <p class="lead">Empowering farmers with technology, data, and innovation.</p>
+        <p>KrishiNet connects farmers, buyers, and suppliers across India to improve transparency and productivity.</p>
+        <h6>Our Mission</h6>
+        <p>To enhance Indian agriculture through smart digital solutions, connecting the farm to the market efficiently.</p>
+      `
+    }
+  };
+
+  // Handle link clicks
+  document.addEventListener('click', function (e) {
+    const link = e.target.closest('a[data-doc]');
+    if (!link) return;
+    e.preventDefault();
+    const key = link.getAttribute('data-doc');
+    const doc = SITE_DOCS[key];
+    if (!doc) return;
+
+    // Inject content into modal
+    document.getElementById('docModalLabel').innerHTML = doc.title;
+    document.getElementById('docModalBody').innerHTML = doc.html;
+
+    // Show modal
+    const modalEl = document.getElementById('docModal');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  });
+</script>
+
+    
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const strip = document.getElementById('ksStrip');
+        const scrollLeftBtn = document.getElementById('scrollLeftBtn');
+        const scrollRightBtn = document.getElementById('scrollRightBtn');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playIcon = playPauseBtn.querySelector('i');
+        
+        if (!strip) return;
+
+        // Duplicate one set for seamless loop
+        const originals = Array.from(strip.children);
+        const frag = document.createDocumentFragment();
+        originals.forEach(n => frag.appendChild(n.cloneNode(true)));
+        strip.appendChild(frag);
+
+        // Wait for images, then measure half of total content width (1 set)
+        function whenImagesReady(el, cb){
+          const imgs = el.querySelectorAll('img');
+          if (!imgs.length) return cb();
+          let left = imgs.length;
+          imgs.forEach(img => {
+            const done = () => (--left === 0 && cb());
+            if (img.complete) done();
+            else { img.addEventListener('load', done); img.addEventListener('error', done); }
+          });
+        }
+
+        let setWidth = 0;
+        let animationId = null;
+        let isPlaying = true;
+        let speed = 3; // pixels per frame
+
+        function measure() {
+          // after duplication, total scrollWidth = two sets
+          setWidth = strip.scrollWidth / 2;
+        }
+
+        function startAnimation() {
+          if (animationId) cancelAnimationFrame(animationId);
+          
+          function animate() {
+            if (isPlaying && setWidth > 0) {
+              strip.scrollLeft += speed;
+              if (strip.scrollLeft >= setWidth) {
+                strip.scrollLeft -= setWidth; // jump back exactly one set
+              }
+            }
+            animationId = requestAnimationFrame(animate);
+          }
+          
+          animationId = requestAnimationFrame(animate);
+        }
+
+        function stopAnimation() {
+          if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+          }
+        }
+
+        function togglePlayPause() {
+          isPlaying = !isPlaying;
+          if (isPlaying) {
+            playIcon.className = 'fas fa-pause';
+            startAnimation();
+          } else {
+            playIcon.className = 'fas fa-play';
+            stopAnimation();
+          }
+        }
+
+        // Manual scroll controls
+        scrollLeftBtn.addEventListener('click', () => {
+          strip.scrollBy({ left: -300, behavior: 'smooth' });
+        });
+
+        scrollRightBtn.addEventListener('click', () => {
+          strip.scrollBy({ left: 300, behavior: 'smooth' });
+        });
+
+        playPauseBtn.addEventListener('click', togglePlayPause);
+
+        // pause while user interacts
+        strip.addEventListener('mouseenter', () => {
+          if (isPlaying) {
+            stopAnimation();
+          }
+        });
+        
+        strip.addEventListener('mouseleave', () => {
+          if (isPlaying) {
+            startAnimation();
+          }
+        });
+        
+        strip.addEventListener('touchstart', () => {
+          if (isPlaying) {
+            stopAnimation();
+          }
+        }, {passive:true});
+        
+        strip.addEventListener('touchend', () => {
+          if (isPlaying) {
+            // Resume after a short delay
+            setTimeout(() => {
+              if (isPlaying) startAnimation();
+            }, 1000);
+          }
+        });
+
+        let resumeTimeout;
+        const resume = () => {
+          clearTimeout(resumeTimeout);
+          resumeTimeout = setTimeout(() => {
+            if (isPlaying) startAnimation();
+          }, 1000);
+        };
+
+        strip.addEventListener('wheel', () => {
+          if (isPlaying) {
+            stopAnimation();
+            resume();
+          }
+        }, {passive:true});
+        
+        strip.addEventListener('scroll', () => {
+          if (isPlaying) {
+            stopAnimation();
+            resume();
+          }
+        });
+
+        window.addEventListener('resize', () => {
+          measure();
+        });
+
+        whenImagesReady(strip, () => {
+          measure();
+          startAnimation();
+        });
+      });
+    </script>
+
+<script>
+(function(){
+  const listEl = document.getElementById('newsList');
+  const tickerEl = document.getElementById('newsTicker');
+  const langSel = document.getElementById('newsLang');
+
+  const fmtDate = (iso) => {
+    if(!iso) return '';
+    try{ return new Date(iso).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
+    catch { return ''; }
+  };
+
+  function render(items){
+    // safety: show at most 8
+    items = (items || []).slice(0, 8);
+
+    // TICKER: use internal /news/view so users don't leave site
+    tickerEl.innerHTML = '';
+    items.forEach(it=>{
+      const a = document.createElement('a');
+      const internal = '/news/view?url=' + encodeURIComponent(it.link || '');
+      a.href = internal;
+      a.className = 'news-pill';
+      a.style.cursor = 'pointer';
+      a.innerHTML = `<strong>${it.title}</strong> <small>• ${it.source||''}</small>`;
+      // ensure click navigates inside site (no new tab)
+      a.addEventListener('click', (e)=>{
+        e.preventDefault();
+        // Use location.href to navigate in same tab
+        location.href = internal;
+      });
+      tickerEl.appendChild(a);
+    });
+    // restart animation (if any)
+    tickerEl.style.animation = 'none';
+    void tickerEl.offsetWidth;
+    tickerEl.style.animation = null;
+
+    // GRID: compact, title only
+    listEl.innerHTML = '';
+    items.forEach(it=>{
+      const col = document.createElement('div');
+      col.className = 'col-md-6 col-lg-4';
+      col.innerHTML = `
+  <div class="card h-100 news-card">
+    ${ it.image ? `<img src="${it.image}" class="card-img-top" onerror="this.style.display='none'">` : '' }
+    <div class="card-body d-flex flex-column">
+      <div class="source mb-1">${it.source || ''}</div>
+      <h6 class="card-title line-2">${it.title}</h6>
+      <div class="mt-auto d-flex justify-content-between align-items-center">
+        <small class="date">${fmtDate(it.published)}</small>
+        <a class="btn btn-sm btn-outline-primary"
+           href="/news/view?url=${encodeURIComponent(it.link)}"
+           target="_self" rel="noopener">Read</a>
+      </div>
+    </div>
+  </div>`;
+      listEl.appendChild(col);
+    });
+  }
+
+  async function loadNews(){
+    const lang = (langSel && langSel.value ? langSel.value : 'en').toLowerCase();
+
+    // loading state
+    tickerEl.innerHTML = '';
+    listEl.innerHTML = `<div class="col-12"><div class="alert alert-light border">Loading ${lang.toUpperCase()} headlines…</div></div>`;
+
+    try{
+      const res = await fetch(`/api/news?` + new URLSearchParams({ lang, limit: 8 }));
+      if (!res.ok) throw new Error('Network response not ok');
+      const data = await res.json();
+      if (!data.items || data.items.length === 0){
+        listEl.innerHTML = `<div class="col-12"><div class="alert alert-warning">
+          No headlines available for this language right now.
+        </div></div>`;
+        tickerEl.innerHTML = '';
+        return;
+      }
+      render(data.items);
+    }catch(e){
+      console.error('loadNews error', e);
+      listEl.innerHTML = `<div class="col-12"><div class="alert alert-danger">
+        Could not load headlines.</div></div>`;
+      tickerEl.innerHTML = '';
+    }
+  }
+
+  if (langSel) langSel.addEventListener('change', loadNews);
+  window.addEventListener('DOMContentLoaded', loadNews);
+})();
+</script>
+ 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const pricesTableBody = document.getElementById('pricesTableBody');
+  const refreshBtn = document.getElementById('refreshPrices');
+  const lastUpdatedEl = document.getElementById('lastUpdated');
+  const toggleBtn = document.getElementById('toggleMore');
+
+  // Filters
+  const qCommodity = document.getElementById('qCommodity');
+  const qState = document.getElementById('qState');
+  const qDate = document.getElementById('qDate');
+  const unitQ = document.getElementById('unitQ');
+  const unitKg = document.getElementById('unitKg');
+  const applyBtn = document.getElementById('applyFilters');
+
+  const INITIAL_VISIBLE_ROWS = 10;
+  let expanded = false;
+  let lastRows = [];
+  let unit = 'quintal';
+  let lastQuery = { commodity: '', states: '', date: '', unit, limit: 100 };
+
+  // Pre-fill date to today
+  qDate.value = new Date().toISOString().slice(0,10);
+
+  function trFor(it){
+    const fmt = (v)=> (v==null||isNaN(v)) ? '—'
+                 : (unit==='kg' ? `₹${Number(v).toFixed(2)}` : `₹${Math.round(Number(v)).toLocaleString()}`);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <div class="commodity-name">${it.commodity || '-'}</div>
+        <div class="text-muted small">${it.variety || ''}</div>
+      </td>
+      <td><div class="market-name">${[it.market, it.district, it.state].filter(Boolean).join(', ')}</div></td>
+      <td class="current-price">
+        <strong>${fmt(it.modal_price)}</strong> <span class="text-muted small">(${it.unit})</span><br>
+        <small class="text-muted">Min ${fmt(it.min_price)} • Max ${fmt(it.max_price)}</small>
+      </td>
+      <td>
+        <span class="badge bg-light text-dark border">${it.date || ''}</span><br>
+        <small class="text-muted">${it.source || ''}</small>
+      </td>
+    `;
+    return tr;
+  }
+
+  function applyRowVisibility() {
+    lastRows.forEach((row, idx) => {
+      if (!expanded && idx >= INITIAL_VISIBLE_ROWS) row.classList.add('hidden-row');
+      else row.classList.remove('hidden-row');
+    });
+  }
+  function updateToggleText() {
+    const hidden = Math.max(0, lastRows.length - INITIAL_VISIBLE_ROWS);
+    if (!toggleBtn) return;
+    if (hidden <= 0) { toggleBtn.style.display = 'none'; return; }
+    toggleBtn.style.display = 'inline-block';
+    toggleBtn.textContent = expanded ? 'Show Less' : `View More Commodities (${hidden} more)`;
+  }
+
+  async function updatePriceTable(query = lastQuery) {
+    pricesTableBody.innerHTML = `<tr><td colspan="4">Loading live prices…</td></tr>`;
+    const qs = new URLSearchParams({
+      commodity: query.commodity || '',
+      states: query.states || '',
+      unit: query.unit || 'quintal',
+      limit: String(query.limit || 100),
+    });
+    if (query.date) qs.set('date', query.date); // YYYY-MM-DD
+
+    try {
+      const res = await fetch(`/api/market-prices?` + qs.toString());
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+
+      pricesTableBody.innerHTML = '';
+      lastRows = (data.items || []).map(trFor);
+      lastRows.forEach(tr => pricesTableBody.appendChild(tr));
+
+      expanded = false;
+      applyRowVisibility();
+      updateToggleText();
+      lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+    } catch (e) {
+      pricesTableBody.innerHTML = `<tr><td colspan="4">Could not load live prices.</td></tr>`;
+    }
+  }
+
+  // Unit toggle
+  unitQ?.addEventListener('click', ()=>{ unit='quintal'; lastQuery.unit=unit; updatePriceTable(); });
+  unitKg?.addEventListener('click', ()=>{ unit='kg';       lastQuery.unit=unit; updatePriceTable(); });
+
+  // Apply filters
+  applyBtn?.addEventListener('click', ()=>{
+    lastQuery = {
+      commodity: (qCommodity.value || '').trim(),
+      states: (qState.value || '').trim(),
+      date: (qDate.value || '').trim(), // YYYY-MM-DD
+      unit,
+      limit: 100
+    };
+    updatePriceTable(lastQuery);
+  });
+
+  // View more / less
+  toggleBtn?.addEventListener('click', ()=>{
+    expanded = !expanded;
+    applyRowVisibility();
+    updateToggleText();
+  });
+
+  // Manual refresh + auto refresh
+  refreshBtn.addEventListener('click', ()=>updatePriceTable(lastQuery));
+  setInterval(()=>updatePriceTable(lastQuery), 120000);
+
+  // Initial load (blank filters = broader list)
+  updatePriceTable(lastQuery);
+});
+</script>
+
+
+
+
+           
+  
+     
+</body>
+</html>

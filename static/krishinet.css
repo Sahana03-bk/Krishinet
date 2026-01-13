@@ -1,0 +1,15 @@
+:root{
+  --green-1:#2E7D32; --green-2:#4CAF50; --ink:#1b3a2a; --muted:#6b7d6f;
+  --line:#e6eee6; --cream:#fffdf6; --bg:#f7faf7;
+}
+html,body{height:100%}
+body.bg-body{background:linear-gradient(180deg,var(--cream),var(--bg))}
+.navbar .nav-link{color:#244e34}
+.navbar .nav-link.active,.navbar .nav-link:hover{color:var(--green-1)}
+.btn-success{background:var(--green-1); border-color:var(--green-1)}
+.btn-outline-success{color:var(--green-1); border-color:var(--green-1)}
+.btn-outline-success:hover{background:var(--green-1); color:#fff}
+.bg-deep{background:linear-gradient(180deg,#214c2d,#173c23)}
+.footer-link{color:#cfe8d3; text-decoration:none}
+.footer-link:hover{color:#fff; text-decoration:underline}
+.card{border-radius:14px}

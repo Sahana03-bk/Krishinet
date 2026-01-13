@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}My Orders{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h3 class="mb-3">Purchase History</h3>
+
+  {% if not orders %}
+    <div class="alert alert-info">No purchases yet.</div>
+  {% else %}
+    <table class="table table-striped align-middle">
+      <thead class="table-success">
+        <tr>
+          <th>Order ID</th>
+          <th>Items</th>
+          <th>Total</th>
+          <th>Seller</th>
+          <th>Status</th>
+          <th>Txn ID</th>
+          <th>Date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in orders %}
+          {% set o = row['order'] %}
+          <tr>
+            <td>#{{ o.id }}</td>
+            <td>
+              <ul class="mb-0 small">
+                {% for it in row['items'] %}
+                  <li>
+                    {{ it.title or ("Product #" ~ it.product_id) }} —
+                    {{ it.quantity }} {{ it.qty_unit or '' }}
+                    @ ₹{{ '%.2f'|format(it.unit_price or 0) }}
+                  </li>
+                {% endfor %}
+              </ul>
+            </td>
+            <td><strong>₹{{ '%.2f'|format(o.total_amount or 0) }}</strong></td>
+            <td>{{ o.seller_name or '—' }}</td>
+            <td>{{ o.status or '—' }}</td>
+            <td>{{ row['txn_id'] or '—' }}</td>
+            <td>{{ o.created_at }}</td>
+            <td>
+              <a href="{{ url_for('marketplace.order_detail', order_id=o.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>
+{% endblock %}
