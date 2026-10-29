@@ -116,8 +116,8 @@ You can register a new account on the application to explore its available featu
 
 If a dedicated demo account is configured, provide its credentials here.
 
-- **Email:** `your-demo-email@example.com`
-- **Password:** `Use-a-dedicated-demo-password`
+- **Email:** `sahanakgowda2003@gmail.com`
+- **Password:** `Sahana@2003`
 
 *Replace these placeholders with working demo credentials before sharing. Do not use personal account credentials.*
 
