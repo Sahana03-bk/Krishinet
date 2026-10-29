@@ -1,180 +1,166 @@
-🌾 KrishiNet – Smart Agriculture Platform
-📌 Project Summary
+# 🌾 KrishiNet – Smart Agriculture Platform
 
-KrishiNet is a full-stack smart agriculture web application built using Python (Flask) that helps farmers sell crops, rent farming equipment, receive payments, and access real-time agriculture information such as market prices, government schemes, and news.
+## 📌 Project Overview
 
-The project focuses on solving real farming problems by providing a single digital platform for farmers and buyers.
+KrishiNet is a full-stack smart agriculture web application built using **Python and Flask**. It helps farmers sell crops, rent agricultural equipment, receive online payments, and access agricultural information such as market prices, government schemes, and news.
 
-🎯 Why KrishiNet?
+The platform aims to connect farmers and buyers through a single digital solution.
 
-Farmers face problems such as:
+## 🎯 Problem Statement
 
-Dependence on middlemen
+Farmers often face challenges such as:
 
-Lack of fair pricing
+- Dependence on intermediaries.
+- Difficulty finding fair crop prices.
+- Limited access to agricultural equipment rental services.
+- Difficulty accessing government schemes and market information.
+- Manual payment and transaction processes.
 
-No single platform for selling crops and renting equipment
+**KrishiNet aims to address these challenges through web technologies and API integration.**
 
-Difficulty accessing government schemes and market prices
+## ✨ Key Features
 
-Manual payment processes
+### 👨‍🌾 Farmer and User Management
 
-KrishiNet solves these problems using web technology and APIs.
+- User registration and login.
+- Session-based authentication.
+- Personalized dashboards.
+- Profile management.
+- Crop listing and marketplace.
+- Agricultural equipment rental management.
 
-🧩 Features Implemented
-👨‍🌾 Farmer & User Features
+### 💳 Payment Integration
 
-User registration and login
+- Stripe payment integration.
+- Order and transaction management.
+- Payment verification through webhooks.
 
-Session-based authentication
+### 📊 Agricultural Information
 
-Dashboard after login
+- Agricultural news.
+- Crop market price information.
+- Government schemes and loan information.
 
-Crop listing and marketplace
+## 🛠️ Technology Stack
 
-Equipment rental management
+| Component | Technologies |
+|---|---|
+| Backend | Python, Flask |
+| Frontend | HTML, CSS, Bootstrap, JavaScript |
+| Templating | Jinja2 |
+| Database | SQLite |
+| API Integration | REST APIs, Requests |
+| Payment Gateway | Stripe |
+| Production Server | Gunicorn |
+| Containerization | Docker |
+| Cloud Deployment | Render |
+| Version Control | Git, GitHub |
 
-Profile management
+## 🧠 Backend Architecture
 
-💳 Payment System
+The application uses Flask to handle application logic, requests, authentication, database operations, and API integrations.
 
-Secure online payments using Stripe
+### HTTP Methods
 
-Order tracking
+| Method | Purpose |
+|---|---|
+| GET | Retrieve information |
+| POST | Submit data, register, log in, or initiate actions |
+| PUT | Update existing resources |
+| DELETE | Remove resources |
 
-Payment verification via webhook
+*These methods describe the API design where implemented.*
 
-📊 Information Services
+## 🔐 Environment Configuration
 
-Live agriculture news
+Sensitive configuration values are managed through environment variables rather than being committed to the GitHub repository.
 
-Government scheme data
+Examples include:
 
-Crop market prices
+- `SECRET_KEY`
+- `KRISHINET_DB`
+- `DATA_GOV_API_KEY`
+- `NEWSAPI_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_WEBHOOK_SECRET`
 
-🛠 Technology Stack
-Backend (Core Logic)
+Configure the required variables in the Render dashboard. Never publish secret keys or passwords in your repository.
 
-Python
+## 🐳 Docker and Deployment
 
-Flask
+KrishiNet is containerized using Docker and deployed on Render Cloud.
 
-REST API architecture
+### Deployment Workflow
 
-Gunicorn (production server)
+1. Push source code to GitHub.
+2. Connect the GitHub repository to Render.
+3. Build the application using the Dockerfile.
+4. Install dependencies from `requirements-prod.txt`.
+5. Start the Flask application using Gunicorn.
+6. Access the deployed application through its public URL.
 
-Frontend
+### Production Start Command
 
-HTML
-
-CSS
-
-Bootstrap
-
-Jinja2 Templates
-
-JavaScript (form handling, API calls)
-
-Database
-
-SQLite (users, orders, rentals, payments)
-
-DevOps & Deployment
-
-Docker
-
-Render Cloud Platform
-
-Environment Variables
-
-Git & GitHub
-
-🧠 Backend Architecture (Flask)
-
-The backend follows REST API principles:
-
-Method	Usage
-GET	Fetch data (news, prices, products)
-POST	Login, register, payments
-PUT	Update profile, update orders
-DELETE	Remove items
-
-🔐 Environment Variables
-
-Sensitive values are stored securely using environment variables:
-
-DATA_GOV_API_KEY
-SECRET_KEY
-KRISHINET_DB
-STRIPE_SECRET_KEY
-STRIPE_PUBLISHABLE_KEY
-STRIPE_WEBHOOK_SECRET
-NEWSAPI_KEY
-
-
-These are configured in Render dashboard, not pushed to GitHub.
-
-Docker Workflow
-
-Dockerfile defines Python 3.8 environment
-
-Dependencies installed from requirements-prod.txt
-
-Gunicorn starts Flask app
-
-Render runs Docker container automatically
-
-🚀 Deployment (Render + Docker)
-Deployment Steps
-
-Code pushed to GitHub
-
-Render connects to repository
-
-Docker builds application
-
-Gunicorn runs Flask app
-
-App is available publicly
-
-Start Command
+```bash
 gunicorn app:app
+```
 
-Live URL
+## 🚀 Live Application
 
-🔗 https://krishinet-8rx7.onrender.com
+**Live Demo:** https://krishinet-8rx7.onrender.com
 
+You can register a new account on the application to explore its available features.
 
-To explore the application, register a new account or use the demo credentials below.
+## 🔑 Demo Access
 
-Email: sahanakgowda2003@gmail.com
-Password: Sahana@2003
+If a dedicated demo account is configured, provide its credentials here.
 
-🔧 Tools & Packages Used
+- **Email:** `your-demo-email@example.com`
+- **Password:** `Use-a-dedicated-demo-password`
 
+*Replace these placeholders with working demo credentials before sharing. Do not use personal account credentials.*
 
-Flask
+## ⚙️ Installation and Setup
 
-Gunicorn
+### Prerequisites
 
-Stripe
+- Python
+- Git
+- Docker (optional for local containerized setup)
 
-SQLite
+### Run Locally
 
-Requests
+```bash
+# Clone the repository
+git clone https://github.com/Sahana03-bk/Krishinet.git
 
-Docker
+# Navigate to the project directory
+cd Krishinet
 
-Render
+# Create a virtual environment
+python -m venv venv
 
-GitHub
+# Activate on Windows
+venv\Scripts\activate
 
-👩‍💻 Developer Details
+# Install dependencies
+pip install -r requirements-prod.txt
 
-Name: Sahana B K
-Course: MCA
-Project: KrishiNet – Smart Agriculture Platform
+# Start the application
+python app.py
+```
 
+*Configure the required environment variables before running the application. Use the actual dependency file and startup instructions in your repository.*
 
+## 👩‍💻 Developer
 
+**Name:** Sahana B K
 
+**Qualification:** Master of Computer Applications (MCA)
+
+**Project:** KrishiNet – Smart Agriculture Platform
+
+**GitHub:** https://github.com/Sahana03-bk
+
+**Live Application:** https://krishinet-8rx7.onrender.com
