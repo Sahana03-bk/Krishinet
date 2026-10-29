@@ -144,7 +144,14 @@ Live URL
 
 🔗 https://krishinet-8rx7.onrender.com
 
+
+To explore the application, register a new account or use the demo credentials below.
+
+Email: sahanakgowda2003@gmail.com
+Password: Sahana@2003
+
 🔧 Tools & Packages Used
+
 
 Flask
 
